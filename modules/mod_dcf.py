@@ -122,8 +122,9 @@ def render():
             st.markdown("---")
             if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
                 try:
-                    db_url = st.secrets["mysql"]["url"]
-                    engine = create_engine(db_url)
+                    from dcf_controller import get_sqlalchemy_engine
+                    
+                    engine = get_sqlalchemy_engine()
 
                     if st.session_state.df_excel_inputs is not None:
                         df_inp_save = st.session_state.df_excel_inputs.copy()
@@ -140,7 +141,6 @@ def render():
                     st.success("✅ ¡Toda la data del Excel fue insertada en las tablas de MySQL!")
                 except Exception as err:
                     st.error(f"❌ Error en INSERT INTO MySQL: {err}")
-
     # -------------------------------------------------------------------------
     # CONTROLES SIDEBAR
     # -------------------------------------------------------------------------

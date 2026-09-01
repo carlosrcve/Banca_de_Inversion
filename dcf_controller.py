@@ -3,61 +3,82 @@ import os
 from typing import Any, Dict, List, Optional
 import mysql.connector
 from mysql.connector import Error
+from sqlalchemy import create_engine
 from dcf_engine import DCFEngine
 from dcf_models import DCFInputs, DCFResults
 
 
-def get_db_connection():
-    """Establece la conexión segura SSL con TiDB Cloud o MySQL.
-
-    Prioriza la lectura desde st.secrets (Streamlit) y utiliza os.getenv como
-    fallback.
+def get_db_credentials() -> dict:
+    """Extrae las credenciales probando st.secrets (bloque [mysql] o claves individuales)
+    y fallbacks de os.getenv.
     """
+    credentials = {
+        "host": "gateway01.us-east-1.prod.aws.tidbcloud.com",
+        "user": "4K4VAw4t4ZPFUTF.root",
+        "password": "I1lVZQDq2d4KJbQA",
+        "database": "valuations_db",
+        "port": 4000,
+    }
+
     try:
-        try:
-            import streamlit as st
+        import streamlit as st
 
-            host = st.secrets.get(
-                "MYSQL_HOST",
-                os.getenv(
-                    "MYSQL_HOST", "gateway01.us-east-1.prod.aws.tidbcloud.com"
-                ),
-            )
-            user = st.secrets.get("MYSQL_USER", os.getenv("MYSQL_USER", "root"))
-            password = st.secrets.get(
-                "MYSQL_PASSWORD", os.getenv("MYSQL_PASSWORD", "")
-            )
-            database = st.secrets.get(
-                "MYSQL_DATABASE", os.getenv("MYSQL_DATABASE", "valuations_db")
-            )
-            port = int(
-                st.secrets.get("MYSQL_PORT", os.getenv("MYSQL_PORT", 4000))
-            )
-        except (ImportError, Exception):
-            host = os.getenv("MYSQL_HOST", "localhost")
-            user = os.getenv("MYSQL_USER", "root")
-            password = os.getenv("MYSQL_PASSWORD", "")
-            database = os.getenv("MYSQL_DATABASE", "valuations_db")
-            port = int(os.getenv("MYSQL_PORT", 3306))
+        # 1. Intentar desde st.secrets ["mysql"]
+        if "mysql" in st.secrets:
+            sec = st.secrets["mysql"]
+            credentials["host"] = sec.get("host", credentials["host"])
+            credentials["user"] = sec.get("user", credentials["user"])
+            credentials["password"] = sec.get("password", credentials["password"])
+            credentials["database"] = sec.get("database", credentials["database"])
+            credentials["port"] = int(sec.get("port", credentials["port"]))
 
+        # 2. Intentar desde st.secrets a nivel raíz
+        else:
+            credentials["host"] = st.secrets.get("MYSQL_HOST", credentials["host"])
+            credentials["user"] = st.secrets.get("MYSQL_USER", credentials["user"])
+            credentials["password"] = st.secrets.get("MYSQL_PASSWORD", credentials["password"])
+            credentials["database"] = st.secrets.get("MYSQL_DATABASE", credentials["database"])
+            credentials["port"] = int(st.secrets.get("MYSQL_PORT", credentials["port"]))
+
+    except Exception:
+        # Fallback a variables de entorno del sistema
+        credentials["host"] = os.getenv("MYSQL_HOST", credentials["host"])
+        credentials["user"] = os.getenv("MYSQL_USER", credentials["user"])
+        credentials["password"] = os.getenv("MYSQL_PASSWORD", credentials["password"])
+        credentials["database"] = os.getenv("MYSQL_DATABASE", credentials["database"])
+        credentials["port"] = int(os.getenv("MYSQL_PORT", credentials["port"]))
+
+    return credentials
+
+
+def get_db_connection():
+    """Establece la conexión con mysql.connector (usado por el controlador)."""
+    try:
+        creds = get_db_credentials()
         config = {
-            "host": host,
-            "user": user,
-            "password": password,
-            "database": database,
-            "port": port,
+            "host": creds["host"],
+            "user": creds["user"],
+            "password": creds["password"],
+            "database": creds["database"],
+            "port": creds["port"],
             "autocommit": False,
         }
 
-        if "tidbcloud.com" in host or port == 4000:
+        if "tidbcloud.com" in creds["host"] or creds["port"] == 4000:
             config["ssl_verify_cert"] = True
             config["ssl_verify_identity"] = True
 
         return mysql.connector.connect(**config)
-
     except Error as e:
-        print(f"Error al conectar a TiDB Cloud / MySQL: {e}")
+        print(f"Error al conectar a MySQL: {e}")
         return None
+
+
+def get_sqlalchemy_engine():
+    """Genera el Engine de SQLAlchemy de forma segura (usado por Pandas / .to_sql)."""
+    creds = get_db_credentials()
+    db_url = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}:{creds['port']}/{creds['database']}"
+    return create_engine(db_url)
 
 
 class DCFController:
