@@ -3,7 +3,7 @@ import unicodedata
 import pandas as pd
 import streamlit as st
 
-# Importaciones locales del controlador y modelos de DCF
+# Mover todas las importaciones del módulo DCF aquí arriba
 from dcf_controller import DCFController, get_sqlalchemy_engine
 from dcf_models import DCFInputs
 
@@ -283,8 +283,7 @@ def render():
             db_inputs_dict = {}
 
             try:
-                from dcf_controller import DCFController, get_sqlalchemy_engine
-
+                # Usar la función ya importada al inicio del archivo
                 engine = get_sqlalchemy_engine()
 
                 # 1. Consultar inputs base desde MySQL
@@ -330,7 +329,6 @@ def render():
 
             except Exception as db_err:
                 st.warning(f"⚠️ No se pudo consultar la base de datos (se usarán datos locales): {db_err}")
-                from dcf_controller import DCFController
 
             # Asignar variables activas priorizando MySQL > session_state > default
             active_growth_rates = (
@@ -353,7 +351,7 @@ def render():
             g_val = float(db_inputs_dict.get("terminal_growth_rate", st.session_state.get("terminal_growth_rate", default_g)))
             debt_val = float(db_inputs_dict.get("net_debt", st.session_state.get("net_debt", default_debt)))
 
-            # Recalcular el modelo DCF con la data leída de MySQL usando DCFController
+            # Cálculo de valoración utilizando DCFController
             results = DCFController.run_valuation(
                 historical_revenue=rev_val,
                 growth_rates=active_growth_rates,
