@@ -40,7 +40,7 @@ def render():
     ])
 
     # =========================================================================
-    # TABLA / PESTAÑA 1: CARGA DE ARCHIVOS EXCEL
+    # TABLA / PESTAÑA 1: CARGA DE ARCHIVOS EXCEL E INSERCIÓN A MYSQL
     # =========================================================================
     with tab1:
         st.header("📥 Cargar Modelo desde Excel")
@@ -117,7 +117,9 @@ def render():
             except Exception as e:
                 st.error(f"❌ Error al procesar Excel: {e}")
 
+        # Guardar data cruda en MySQL desde tab1
         if st.session_state.df_excel_inputs is not None or st.session_state.df_excel_projs is not None:
+            st.markdown("---")
             if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
                 try:
                     db_url = st.secrets["mysql"]["url"]

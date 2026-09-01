@@ -15,12 +15,14 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Inicializar URL de la Base de Datos (Soporte local secrets.toml y Render Env Vars)
-if "db_url" not in st.session_state:
-    try:
-        st.session_state.db_url = st.secrets["mysql"]["url"]
-    except (KeyError, FileNotFoundError):
-        st.session_state.db_url = os.environ.get("MYSQL_URL")
+# Cadena de conexión por defecto a TiDB Cloud
+DEFAULT_DB_URL = "mysql+pymysql://4K4VAw4t4ZPFUTF.root:I1lVZQDq2d4KJbQA@gateway01.us-east-1.prod.aws.tidbcloud.com:4000/valuations_db"
+
+# Intentar obtener URL desde secrets, variables de entorno o fallback a TiDB Cloud directamente
+try:
+    st.session_state.db_url = st.secrets["mysql"]["url"]
+except Exception:
+    st.session_state.db_url = os.environ.get("MYSQL_URL", DEFAULT_DB_URL)
 
 st.sidebar.title("🏛️ Gylfi Software")
 st.sidebar.markdown("**Suite de Banca de Inversión**")
