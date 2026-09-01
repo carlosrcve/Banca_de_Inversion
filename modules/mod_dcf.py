@@ -75,10 +75,9 @@ def render():
 
                 inputs_sheet = "Inputs" if "Inputs" in sheet_names else sheet_names[0]
 
-                # 1. Intentar leer la pestaña de Inputs.
-                # Se usa header=1 si la primera fila está vacía como en tu estructura actual.
+                # Detectar si la fila 0 trae columnas 'Unnamed'
                 df_inputs = pd.read_excel(excel_file, sheet_name=inputs_sheet)
-                if df_inputs.columns[0].startswith("Unnamed"):
+                if str(df_inputs.columns[0]).startswith("Unnamed"):
                     df_inputs = pd.read_excel(excel_file, sheet_name=inputs_sheet, header=1)
 
                 df_inputs = df_inputs.dropna(how="all")
@@ -86,15 +85,7 @@ def render():
                 param_col, val_col = None, None
                 for col in df_inputs.columns:
                     col_clean = clean_column_name(col)
-                    if col_clean in [
-                        "parametro",
-                        "parametros",
-                        "variable",
-                        "variables",
-                        "concept",
-                        "concepto",
-                        "key",
-                    ]:
+                    if col_clean in ["parametro", "parametros", "variable", "variables", "concept", "concepto", "key"]:
                         param_col = col
                     elif col_clean in ["valor", "valores", "value", "values", "monto", "monto_mensual"]:
                         val_col = col
@@ -104,18 +95,20 @@ def render():
                 if not val_col:
                     val_col = df_inputs.columns[1] if len(df_inputs.columns) > 1 else df_inputs.columns[0]
 
+                # Diccionario de parámetros
                 inputs_dict = dict(zip(df_inputs[param_col].astype(str).str.strip(), df_inputs[val_col]))
 
-                default_company = str(inputs_dict.get("company_name", default_company))
-                default_scenario = str(inputs_dict.get("scenario_name", default_scenario))
-                default_revenue = float(inputs_dict.get("historical_revenue", default_revenue))
-                default_tax = float(inputs_dict.get("tax_rate", default_tax))
-                default_capex = float(inputs_dict.get("capex_percent", default_capex))
-                default_nwc = float(inputs_dict.get("nwc_percent", default_nwc))
-                default_da = float(inputs_dict.get("da_percent", default_da))
-                default_wacc = float(inputs_dict.get("wacc", default_wacc))
-                default_g = float(inputs_dict.get("terminal_growth_rate", default_g))
-                default_debt = float(inputs_dict.get("net_debt", default_debt))
+                # Persistir valores dinámicamente en session_state
+                st.session_state["company_name"] = str(inputs_dict.get("company_name", default_company))
+                st.session_state["scenario_name"] = str(inputs_dict.get("scenario_name", default_scenario))
+                st.session_state["historical_revenue"] = float(inputs_dict.get("historical_revenue", default_revenue))
+                st.session_state["tax_rate"] = float(inputs_dict.get("tax_rate", default_tax))
+                st.session_state["capex_percent"] = float(inputs_dict.get("capex_percent", default_capex))
+                st.session_state["nwc_percent"] = float(inputs_dict.get("nwc_percent", default_nwc))
+                st.session_state["da_percent"] = float(inputs_dict.get("da_percent", default_da))
+                st.session_state["wacc"] = float(inputs_dict.get("wacc", default_wacc))
+                st.session_state["terminal_growth_rate"] = float(inputs_dict.get("terminal_growth_rate", default_g))
+                st.session_state["net_debt"] = float(inputs_dict.get("net_debt", default_debt))
 
                 proj_sheet = (
                     "Projections"
@@ -124,15 +117,18 @@ def render():
                 )
 
                 df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet)
-                if df_projs.columns[0].startswith("Unnamed"):
+                if str(df_projs.columns[0]).startswith("Unnamed"):
                     df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet, header=1)
 
                 df_projs = df_projs.dropna(how="all")
 
+                # Normalizar columnas de proyecciones
+                df_projs.columns = [clean_column_name(col) for col in df_projs.columns]
+
                 if "growth_rate" in df_projs.columns and "ebit_margin" in df_projs.columns:
-                    default_years = len(df_projs)
-                    default_growth = df_projs["growth_rate"].tolist()
-                    default_ebit = df_projs["ebit_margin"].tolist()
+                    st.session_state["proj_years"] = len(df_projs)
+                    st.session_state["growth_rates"] = [float(x) for x in df_projs["growth_rate"].tolist()]
+                    st.session_state["ebit_margins"] = [float(x) for x in df_projs["ebit_margin"].tolist()]
 
                 st.session_state.df_excel_inputs = df_inputs
                 st.session_state.df_excel_projs = df_projs
@@ -277,9 +273,43 @@ def render():
         # =========================================================================
         # TABLA / PESTAÑA 2: MÉTRICAS DE VALORACIÓN Y TABLA DE FLUJOS (FCFF)
         # =========================================================================
+        # =========================================================================
+        # TABLA / PESTAÑA 2: RESULTADOS Y FCFF
+        # =========================================================================
         with tab2:
             st.header("📊 Resultados de Valoración y Tabla FCFF")
-            
+
+            # Priorizar valores del session_state si provienen de la carga de Excel
+            active_growth_rates = st.session_state.get("growth_rates", growth_rates)
+            active_ebit_margins = st.session_state.get("ebit_margins", ebit_margins)
+            active_years = len(active_growth_rates)
+            active_years_labels = [f"Año {i+1}" for i in range(active_years)]
+
+            # Si se cargaron valores desde Excel, recalcular los resultados dinámicamente
+            if "growth_rates" in st.session_state or "ebit_margins" in st.session_state:
+                rev = st.session_state.get("historical_revenue", default_revenue)
+                tax = st.session_state.get("tax_rate", default_tax)
+                capex = st.session_state.get("capex_percent", default_capex)
+                nwc = st.session_state.get("nwc_percent", default_nwc)
+                da = st.session_state.get("da_percent", default_da)
+                wacc_val = st.session_state.get("wacc", default_wacc)
+                g_val = st.session_state.get("terminal_growth_rate", default_g)
+                net_debt_val = st.session_state.get("net_debt", default_debt)
+
+                # Se asume que calculate_dcf o la función de valoración esté disponible en el scope
+                results = calculate_dcf(
+                    revenue=rev,
+                    growth_rates=active_growth_rates,
+                    ebit_margins=active_ebit_margins,
+                    tax_rate=tax,
+                    capex_pct=capex,
+                    nwc_pct=nwc,
+                    da_pct=da,
+                    wacc=wacc_val,
+                    g=g_val,
+                    net_debt=net_debt_val,
+                )
+
             col_res1, col_res2, col_res3 = st.columns(3)
             col_res1.metric("🏢 Enterprise Value (EV)", f"${results.enterprise_value:,.2f}")
             col_res2.metric("💵 Equity Value (Patrimonio)", f"${results.equity_value:,.2f}")
@@ -289,9 +319,9 @@ def render():
             st.subheader("📋 Tabla Proyectada de Flujos de Caja (FCFF)")
 
             df_projections = pd.DataFrame({
-                "Año": years_labels,
-                "Tasa Crec. (%)": [g * 100 for g in growth_rates],
-                "Margen EBIT (%)": [m * 100 for m in ebit_margins],
+                "Año": active_years_labels,
+                "Tasa Crec. (%)": [g * 100 if g <= 1 else g for g in active_growth_rates],
+                "Margen EBIT (%)": [m * 100 if m <= 1 else m for m in active_ebit_margins],
                 "Ingresos Proyectados ($)": results.projected_revenues,
                 "EBIT ($)": results.projected_ebit,
                 "NOPAT ($)": results.projected_nopat,
@@ -318,14 +348,15 @@ def render():
         with tab3:
             st.header("📈 Análisis Gráfico de Valor Presente")
             st.subheader("Valor Presente de Flujos Proyectados (PV FCF)")
-            
+
+            active_years_labels = [f"Año {i+1}" for i in range(len(results.pv_cash_flows))]
+
             df_chart = pd.DataFrame({
-                "Año": years_labels,
+                "Año": active_years_labels,
                 "PV FCF": [float(val) for val in results.pv_cash_flows],
             }).set_index("Año")
 
             st.bar_chart(df_chart)
-
         # =========================================================================
         # TABLA / PESTAÑA 4: GUARDAR Y CONSULTAR ESCENARIOS EN BASE DE DATOS
         # =========================================================================
