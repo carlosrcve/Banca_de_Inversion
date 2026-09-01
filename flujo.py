@@ -74,12 +74,11 @@ Módulo de Análisis Geoscatelital/Alternativo: Consultas automáticas a APIs de
 
 
 
-https://bancadeinversion-axcln8mqbrzxadh5qq7ctf.streamlit.app/
+https://gylfisoftware-bancadeinversion.streamlit.app/
 
-
-
+https://share.streamlit.io/
 cd "C:\Users\Carlos Rodriguez\Desktop\Banca_de_Inversion"
 
 git add app.py
-git commit -m "Fix: Ajuste de escala float para grafico"
+git commit -m "Fix: Corregir IndentationError en app.py"
 git push origin main
