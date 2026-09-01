@@ -3,6 +3,8 @@ import pandas as pd
 import streamlit as st
 from dcf_controller import DCFController
 from dcf_models import DCFInputs
+import re
+import unicodedata
 
 def render():
     st.title("📊 Modelo de Valoración por Flujo de Caja Descontado (DCF)")
