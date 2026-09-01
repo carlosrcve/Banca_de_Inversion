@@ -279,36 +279,98 @@ def render():
         with tab2:
             st.header("📊 Resultados de Valoración y Tabla FCFF")
 
-            # Priorizar valores del session_state si provienen de la carga de Excel
-            active_growth_rates = st.session_state.get("growth_rates", growth_rates)
-            active_ebit_margins = st.session_state.get("ebit_margins", ebit_margins)
+            # --- Carga de datos directamente desde MySQL ---
+            db_growth_rates = None
+            db_ebit_margins = None
+            db_inputs_dict = {}
+
+            try:
+                from dcf_controller import get_sqlalchemy_engine
+
+                engine = get_sqlalchemy_engine()
+
+                # 1. Consultar inputs base desde MySQL
+                df_db_inputs = pd.read_sql(
+                    "SELECT * FROM excel_inputs_raw WHERE company_name = %s AND scenario_name = %s",
+                    con=engine,
+                    params=(default_company, default_scenario),
+                )
+
+                if not df_db_inputs.empty:
+                    # Detectar columnas de parámetros y valores
+                    col_p = (
+                        [c for c in df_db_inputs.columns if c in ["parametro", "concepto", "key", "variable"]][0]
+                        if any(c in df_db_inputs.columns for c in ["parametro", "concepto", "key", "variable"])
+                        else df_db_inputs.columns[0]
+                    )
+
+                    col_v = (
+                        [c for c in df_db_inputs.columns if c in ["valor", "monto", "monto_mensual"]][0]
+                        if any(c in df_db_inputs.columns for c in ["valor", "monto", "monto_mensual"])
+                        else df_db_inputs.columns[1]
+                    )
+
+                    db_inputs_dict = dict(zip(df_db_inputs[col_p].astype(str).str.strip(), df_db_inputs[col_v]))
+
+                # 2. Consultar proyecciones desde MySQL
+                df_db_projs = pd.read_sql(
+                    "SELECT * FROM excel_projections_raw WHERE company_name = %s AND scenario_name = %s",
+                    con=engine,
+                    params=(default_company, default_scenario),
+                )
+
+                if (
+                    not df_db_projs.empty
+                    and "growth_rate" in df_db_projs.columns
+                    and "ebit_margin" in df_db_projs.columns
+                ):
+                    db_growth_rates = [
+                        float(str(x).replace(",", ".")) for x in df_db_projs["growth_rate"].dropna().tolist()
+                    ]
+                    db_ebit_margins = [
+                        float(str(x).replace(",", ".")) for x in df_db_projs["ebit_margin"].dropna().tolist()
+                    ]
+
+            except Exception as db_err:
+                st.warning(f"⚠️ No se pudo consultar la base de datos (se usarán datos locales): {db_err}")
+
+            # Asignar variables activas priorizando MySQL > session_state > default
+            active_growth_rates = (
+                db_growth_rates
+                if db_growth_rates
+                else st.session_state.get("growth_rates", growth_rates)
+            )
+            active_ebit_margins = (
+                db_ebit_margins
+                if db_ebit_margins
+                else st.session_state.get("ebit_margins", ebit_margins)
+            )
+
+            rev_val = float(db_inputs_dict.get("historical_revenue", st.session_state.get("historical_revenue", default_revenue)))
+            tax_val = float(db_inputs_dict.get("tax_rate", st.session_state.get("tax_rate", default_tax)))
+            capex_val = float(db_inputs_dict.get("capex_percent", st.session_state.get("capex_percent", default_capex)))
+            nwc_val = float(db_inputs_dict.get("nwc_percent", st.session_state.get("nwc_percent", default_nwc)))
+            da_val = float(db_inputs_dict.get("da_percent", st.session_state.get("da_percent", default_da)))
+            wacc_val = float(db_inputs_dict.get("wacc", st.session_state.get("wacc", default_wacc)))
+            g_val = float(db_inputs_dict.get("terminal_growth_rate", st.session_state.get("terminal_growth_rate", default_g)))
+            debt_val = float(db_inputs_dict.get("net_debt", st.session_state.get("net_debt", default_debt)))
+
+            # Recalcular el modelo DCF con la data leída de MySQL
+            results = calculate_dcf(
+                revenue=rev_val,
+                growth_rates=active_growth_rates,
+                ebit_margins=active_ebit_margins,
+                tax_rate=tax_val,
+                capex_pct=capex_val,
+                nwc_pct=nwc_val,
+                da_pct=da_val,
+                wacc=wacc_val,
+                g=g_val,
+                net_debt=debt_val,
+            )
+
             active_years = len(active_growth_rates)
             active_years_labels = [f"Año {i+1}" for i in range(active_years)]
-
-            # Si se cargaron valores desde Excel, recalcular los resultados dinámicamente
-            if "growth_rates" in st.session_state or "ebit_margins" in st.session_state:
-                rev = st.session_state.get("historical_revenue", default_revenue)
-                tax = st.session_state.get("tax_rate", default_tax)
-                capex = st.session_state.get("capex_percent", default_capex)
-                nwc = st.session_state.get("nwc_percent", default_nwc)
-                da = st.session_state.get("da_percent", default_da)
-                wacc_val = st.session_state.get("wacc", default_wacc)
-                g_val = st.session_state.get("terminal_growth_rate", default_g)
-                net_debt_val = st.session_state.get("net_debt", default_debt)
-
-                # Se asume que calculate_dcf o la función de valoración esté disponible en el scope
-                results = calculate_dcf(
-                    revenue=rev,
-                    growth_rates=active_growth_rates,
-                    ebit_margins=active_ebit_margins,
-                    tax_rate=tax,
-                    capex_pct=capex,
-                    nwc_pct=nwc,
-                    da_pct=da,
-                    wacc=wacc_val,
-                    g=g_val,
-                    net_debt=net_debt_val,
-                )
 
             col_res1, col_res2, col_res3 = st.columns(3)
             col_res1.metric("🏢 Enterprise Value (EV)", f"${results.enterprise_value:,.2f}")
