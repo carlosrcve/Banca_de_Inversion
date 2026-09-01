@@ -1,7 +1,6 @@
 # app.py
 from dcf_controller import DCFController
 from dcf_models import DCFInputs
-import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -156,7 +155,7 @@ try:
       value=f"${results.equity_value:,.2f}",
   )
   col_res3.metric(
-      label="🌐 Valor Terminal Presente (PV TV)",
+      label="🌐 Valor Presente TV",
       value=f"${results.pv_terminal_value:,.2f}",
   )
 
@@ -190,33 +189,17 @@ try:
   )
 
   # -------------------------------------------------------------------------
-  # Gráficos interactivos adaptativos con Altair
+  # Restauración del gráfico original de barras (PV FCF)
   # -------------------------------------------------------------------------
-  st.subheader("📈 Evolución del Flujo de Caja Libre Proyectado")
+  st.subheader("Valor Presente de Flujos Proyectados")
 
-  # DataFrame en formato largo optimizado para Altair
+  # DataFrame configurado para el gráfico de barras nativo
   df_chart = pd.DataFrame({
-      "Año": years_labels * 2,
-      "Monto": [float(val) for val in results.free_cash_flows]
-      + [float(val) for val in results.pv_cash_flows],
-      "Métrica": ["Flujo Caja Libre (FCF) ($)"] * num_years
-      + ["PV FCF ($)"] * num_years,
-  })
+      "Año": years_labels,
+      "PV FCF": [float(val) for val in results.pv_cash_flows],
+  }).set_index("Año")
 
-  # Construcción del gráfico de líneas con puntos y escala dinámica en eje Y
-  chart = (
-      alt.Chart(df_chart)
-      .mark_line(point=True)
-      .encode(
-          x=alt.X("Año:N", sort=years_labels, title="Año de Proyección"),
-          y=alt.Y("Monto:Q", scale=alt.Scale(zero=False), title="Monto ($)"),
-          color=alt.Color("Métrica:N", title="Métrica"),
-          tooltip=["Año", "Métrica", alt.Tooltip("Monto:Q", format="$,.2f")],
-      )
-      .properties(height=380)
-  )
-
-  st.altair_chart(chart, use_container_width=True)
+  st.bar_chart(df_chart)
 
   # -------------------------------------------------------------------------
   # 5. PERSISTENCIA EN TIDB CLOUD / MYSQL
