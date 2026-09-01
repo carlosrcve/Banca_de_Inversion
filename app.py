@@ -44,216 +44,93 @@ st.sidebar.markdown("---")
 if module == "📊 Modelo DCF & M&A":
     st.title("📊 Modelo de Valoración por Flujo de Caja Descontado (DCF)")
     st.markdown("""
-    Esta herramienta calcula el **Valor de la Empresa (Enterprise Value)** y el **Valor del Patrimonio (Equity Value)** 
-    con persistencia de escenarios en **TiDB Cloud / MySQL**.
+    Calcula el **Valor de la Empresa (Enterprise Value)** y el **Valor del Patrimonio (Equity Value)** 
+    mediante carga de plantilla Excel o ingreso manual.
     """)
 
+    st.sidebar.header("📥 Cargar Modelo desde Excel")
+    uploaded_file = st.sidebar.file_uploader(
+        "Subir archivo .xlsx / .xls", type=["xlsx", "xls"]
+    )
+
+    # Valores por defecto para entradas
+    default_company = "Empresa Ejemplo S.A."
+    default_scenario = "Base 2026"
+    default_revenue = 1000000.0
+    default_years = 5
+    default_growth = [0.05] * 5
+    default_ebit = [0.15] * 5
+    default_tax = 0.25
+    default_capex = 0.04
+    default_nwc = 0.02
+    default_da = 0.03
+    default_wacc = 0.10
+    default_g = 0.025
+    default_debt = 200000.0
+
+    # Si el usuario sube un archivo Excel
+    if uploaded_file is not None:
+        try:
+            # Lectura de la pestaña de Parámetros/Supuestos
+            df_inputs = pd.read_excel(uploaded_file, sheet_name="Inputs")
+            inputs_dict = dict(zip(df_inputs["Parametro"], df_inputs["Valor"]))
+
+            default_company = str(inputs_dict.get("company_name", default_company))
+            default_scenario = str(inputs_dict.get("scenario_name", default_scenario))
+            default_revenue = float(inputs_dict.get("historical_revenue", default_revenue))
+            default_tax = float(inputs_dict.get("tax_rate", default_tax))
+            default_capex = float(inputs_dict.get("capex_percent", default_capex))
+            default_nwc = float(inputs_dict.get("nwc_percent", default_nwc))
+            default_da = float(inputs_dict.get("da_percent", default_da))
+            default_wacc = float(inputs_dict.get("wacc", default_wacc))
+            default_g = float(inputs_dict.get("terminal_growth_rate", default_g))
+            default_debt = float(inputs_dict.get("net_debt", default_debt))
+
+            # Lectura de las Proyecciones Anuales
+            df_projs = pd.read_excel(uploaded_file, sheet_name="Projections")
+            default_years = len(df_projs)
+            default_growth = df_projs["growth_rate"].tolist()
+            default_ebit = df_projs["ebit_margin"].tolist()
+
+            st.sidebar.success("✅ Archivo Excel cargado correctamente.")
+        except Exception as e:
+            st.sidebar.error(f"❌ Error al procesar Excel: {e}")
+
+    # -------------------------------------------------------------------------
+    # RENDERIZADO DE INTERFAZ EN SIDEBAR
+    # -------------------------------------------------------------------------
     st.sidebar.header("📌 Parámetros Generales")
-    company_name = st.sidebar.text_input(
-        "Nombre de la Empresa", value="Empresa Ejemplo S.A."
-    )
-    scenario_name = st.sidebar.text_input(
-        "Nombre del Escenario", value="Base 2026"
-    )
+    company_name = st.sidebar.text_input("Nombre de la Empresa", value=default_company)
+    scenario_name = st.sidebar.text_input("Nombre del Escenario", value=default_scenario)
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("📈 Datos Financieros Iniciales")
-
     historical_revenue = st.sidebar.number_input(
-        "Ingresos del Último Año ($)",
-        min_value=0.0,
-        value=1000000.0,
-        step=50000.0,
-        format="%.2f",
+        "Ingresos del Último Año ($)", min_value=0.0, value=default_revenue, step=50000.0, format="%.2f"
     )
-
-    num_years = st.sidebar.slider(
-        "Años de Proyección", min_value=3, max_value=10, value=5
-    )
-
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("🎯 Proyecciones Detalladas por Año")
+    num_years = st.sidebar.slider("Años de Proyección", min_value=3, max_value=10, value=default_years)
 
     growth_rates = []
     ebit_margins = []
-
-    cols_years = st.sidebar.columns(2)
-    with cols_years[0]:
-        st.caption("Crecimiento (%)")
-    with cols_years[1]:
-        st.caption("Margen EBIT (%)")
-
     for i in range(num_years):
         col1, col2 = st.sidebar.columns(2)
-        with col1:
-            g = (
-                col1.number_input(
-                    f"Año {i+1} Crec.", value=5.0, step=0.5, key=f"g_{i}"
-                )
-                / 100.0
-            )
-            growth_rates.append(g)
-        with col2:
-            m = (
-                col2.number_input(
-                    f"Año {i+1} EBIT", value=15.0, step=0.5, key=f"m_{i}"
-                )
-                / 100.0
-            )
-            ebit_margins.append(m)
+        g_val = (default_growth[i] * 100) if i < len(default_growth) else 5.0
+        m_val = (default_ebit[i] * 100) if i < len(default_ebit) else 15.0
+
+        g = col1.number_input(f"Año {i+1} Crec. (%)", value=float(g_val), step=0.5, key=f"g_{i}") / 100.0
+        m = col2.number_input(f"Año {i+1} EBIT (%)", value=float(m_val), step=0.5, key=f"m_{i}") / 100.0
+        growth_rates.append(g)
+        ebit_margins.append(m)
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("⚙️ Supuestos Financieros & Tasa de Descuento")
-
-    tax_rate = (
-        st.sidebar.number_input("Tasa de Impuestos (%)", value=25.0, step=1.0)
-        / 100.0
-    )
-    capex_percent = (
-        st.sidebar.number_input("CapEx / Ingresos (%)", value=4.0, step=0.5)
-        / 100.0
-    )
-    nwc_percent = (
-        st.sidebar.number_input("Δ NWC / Ingresos (%)", value=2.0, step=0.5)
-        / 100.0
-    )
-    da_percent = (
-        st.sidebar.number_input("D&A / Ingresos (%)", value=3.0, step=0.5)
-        / 100.0
-    )
-    wacc = (
-        st.sidebar.number_input(
-            "WACC - Costo Promedio del Capital (%)", value=10.0, step=0.5
-        )
-        / 100.0
-    )
-    terminal_growth_rate = (
-        st.sidebar.number_input(
-            "Tasa de Crecimiento Perpetua g (%)", value=2.5, step=0.1
-        )
-        / 100.0
-    )
-    net_debt = st.sidebar.number_input(
-        "Deuda Neta ($)", value=200000.0, step=10000.0
-    )
-
-    try:
-        results = DCFController.run_valuation(
-            historical_revenue=historical_revenue,
-            growth_rates=growth_rates,
-            ebit_margins=ebit_margins,
-            tax_rate=tax_rate,
-            capex_percent=capex_percent,
-            nwc_percent=nwc_percent,
-            da_percent=da_percent,
-            wacc=wacc,
-            terminal_growth_rate=terminal_growth_rate,
-            net_debt=net_debt,
-        )
-
-        current_inputs = DCFInputs(
-            historical_revenue=historical_revenue,
-            growth_rates=growth_rates,
-            ebit_margins=ebit_margins,
-            tax_rate=tax_rate,
-            capex_percent=capex_percent,
-            nwc_percent=nwc_percent,
-            da_percent=da_percent,
-            wacc=wacc,
-            terminal_growth_rate=terminal_growth_rate,
-            net_debt=net_debt,
-        )
-
-        col_res1, col_res2, col_res3 = st.columns(3)
-        col_res1.metric(
-            "🏢 Enterprise Value (EV)", f"${results.enterprise_value:,.2f}"
-        )
-        col_res2.metric(
-            "💵 Equity Value (Patrimonio)", f"${results.equity_value:,.2f}"
-        )
-        col_res3.metric(
-            "🌐 Valor Presente TV", f"${results.pv_terminal_value:,.2f}"
-        )
-
-        st.markdown("---")
-        st.subheader("📋 Tabla Proyectada de Flujos de Caja (FCFF)")
-
-        years_labels = [f"Año {i+1}" for i in range(num_years)]
-        df_projections = pd.DataFrame({
-            "Año": years_labels,
-            "Tasa Crec. (%)": [g * 100 for g in growth_rates],
-            "Margen EBIT (%)": [m * 100 for m in ebit_margins],
-            "Ingresos Proyectados ($)": results.projected_revenues,
-            "EBIT ($)": results.projected_ebit,
-            "NOPAT ($)": results.projected_nopat,
-            "Flujo Caja Libre (FCF) ($)": results.free_cash_flows,
-            "PV FCF ($)": results.pv_cash_flows,
-        })
-
-        st.dataframe(
-            df_projections.style.format({
-                "Tasa Crec. (%)": "{:.2f}%",
-                "Margen EBIT (%)": "{:.2f}%",
-                "Ingresos Proyectados ($)": "${:,.2f}",
-                "EBIT ($)": "${:,.2f}",
-                "NOPAT ($)": "${:,.2f}",
-                "Flujo Caja Libre (FCF) ($)": "${:,.2f}",
-                "PV FCF ($)": "${:,.2f}",
-            }),
-            use_container_width=True,
-        )
-
-        st.subheader("Valor Presente de Flujos Proyectados")
-        df_chart = pd.DataFrame({
-            "Año": years_labels,
-            "PV FCF": [float(val) for val in results.pv_cash_flows],
-        }).set_index("Año")
-
-        st.bar_chart(df_chart)
-
-        st.markdown("---")
-        st.subheader("💾 Guardar y Consultar Valoraciones")
-
-        col_btn, col_history = st.columns([1, 2])
-
-        with col_btn:
-            st.write("#### Guardar Escenario Actual")
-            if st.button("💾 Guardar en Base de Datos", type="primary"):
-                success = DCFController.save_valuation(
-                    company_name=company_name,
-                    scenario_name=scenario_name,
-                    inputs=current_inputs,
-                    results=results,
-                )
-                if success:
-                    st.success(
-                        f"✅ Escenario '{scenario_name}' guardado exitosamente en TiDB Cloud."
-                    )
-                else:
-                    st.error(
-                        "❌ Ocurrió un error al intentar guardar en la base de datos."
-                    )
-
-        with col_history:
-            st.write("#### Escenarios Guardados de la Empresa")
-            if st.button("🔄 Consultar Historial"):
-                scenarios = DCFController.get_saved_scenarios(company_name)
-                if scenarios:
-                    df_scenarios = pd.DataFrame(scenarios)
-                    st.dataframe(
-                        df_scenarios.style.format({
-                            "enterprise_value": "${:,.2f}",
-                            "equity_value": "${:,.2f}",
-                        }),
-                        use_container_width=True,
-                    )
-                else:
-                    st.info(
-                        f"No se encontraron escenarios registrados para '{company_name}'."
-                    )
-
-    except Exception as e:
-        st.error(f"Error en los cálculos o en la ejecución: {e}")
+    tax_rate = st.sidebar.number_input("Tasa Impuestos (%)", value=default_tax * 100, step=1.0) / 100.0
+    capex_percent = st.sidebar.number_input("CapEx / Ingresos (%)", value=default_capex * 100, step=0.5) / 100.0
+    nwc_percent = st.sidebar.number_input("Δ NWC / Ingresos (%)", value=default_nwc * 100, step=0.5) / 100.0
+    da_percent = st.sidebar.number_input("D&A / Ingresos (%)", value=default_da * 100, step=0.5) / 100.0
+    wacc = st.sidebar.number_input("WACC (%)", value=default_wacc * 100, step=0.5) / 100.0
+    terminal_growth_rate = st.sidebar.number_input("Tasa g (%)", value=default_g * 100, step=0.1) / 100.0
+    net_debt = st.sidebar.number_input("Deuda Neta ($)", value=default_debt, step=10000.0)
 
 # -----------------------------------------------------------------------------
 # MÓDULO 2: MERCADOS & CLASES DE ACTIVOS
