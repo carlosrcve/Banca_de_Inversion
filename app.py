@@ -191,15 +191,16 @@ try:
   # -------------------------------------------------------------------------
   # Restauración del gráfico original de barras (PV FCF)
   # -------------------------------------------------------------------------
-  st.subheader("Valor Presente de Flujos Proyectados")
+    st.subheader("Valor Presente de Flujos Proyectados")
 
-  # DataFrame configurado para el gráfico de barras nativo
-  df_chart = pd.DataFrame({
-      "Año": years_labels,
-      "PV FCF": [float(val) for val in results.pv_cash_flows],
-  }).set_index("Año")
+    # DataFrame con índice 'Año' configurado para el gráfico de barras nativo
+    df_chart = pd.DataFrame({
+        "Año": years_labels,
+        "PV FCF": [float(val) for val in results.pv_cash_flows]
+    }).set_index("Año")
 
-  st.bar_chart(df_chart)
+    # Renderizar el gráfico de barras de Streamlit
+    st.bar_chart(df_chart)
 
   # -------------------------------------------------------------------------
   # 5. PERSISTENCIA EN TIDB CLOUD / MYSQL
