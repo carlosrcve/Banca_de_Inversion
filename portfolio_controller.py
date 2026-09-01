@@ -1,7 +1,5 @@
 # portfolio_controller.py
-from db import get_db_connection
-
-
+from .db import get_db_connection  # <--- Cambia "from db import" por "from .db import"
 class PortfolioController:
 
     @staticmethod
