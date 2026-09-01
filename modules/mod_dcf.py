@@ -118,6 +118,7 @@ def render():
                 st.error(f"❌ Error al procesar Excel: {e}")
 
         # Guardar data cruda en MySQL desde tab1
+        # Guardar data cruda en MySQL desde tab1
         if st.session_state.df_excel_inputs is not None or st.session_state.df_excel_projs is not None:
             st.markdown("---")
             if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
@@ -126,19 +127,47 @@ def render():
                     
                     engine = get_sqlalchemy_engine()
 
+                    # 1. Procesar df_excel_inputs
                     if st.session_state.df_excel_inputs is not None:
-                        df_inp_save = st.session_state.df_excel_inputs.copy()
-                        df_inp_save["company_name"] = default_company
-                        df_inp_save["scenario_name"] = default_scenario
-                        df_inp_save.to_sql("excel_inputs_raw", con=engine, if_exists="append", index=False)
+                        df_inp = st.session_state.df_excel_inputs.copy()
+                        
+                        # Si la primera fila contiene los encabezados reales ("Categoría", "Concepto", etc.)
+                        if "Unnamed" in str(df_inp.columns[0]):
+                            df_inp.columns = df_inp.iloc[0]  # Tomar la primera fila como nombre de columnas
+                            df_inp = df_inp[1:].reset_index(drop=True)  # Eliminar la fila promovida
+                        
+                        # Limpiar nombres de columnas (quitar espacios, saltos de línea y caracteres especiales)
+                        df_inp.columns = [
+                            str(col).strip().replace("\n", " ").replace(" ", "_").lower() 
+                            for col in df_inp.columns
+                        ]
+                        
+                        df_inp["company_name"] = default_company
+                        df_inp["scenario_name"] = default_scenario
+                        
+                        # Guardar en MySQL
+                        df_inp.to_sql("excel_inputs_raw", con=engine, if_exists="append", index=False)
 
+                    # 2. Procesar df_excel_projs
                     if st.session_state.df_excel_projs is not None:
-                        df_proj_save = st.session_state.df_excel_projs.copy()
-                        df_proj_save["company_name"] = default_company
-                        df_proj_save["scenario_name"] = default_scenario
-                        df_proj_save.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
+                        df_proj = st.session_state.df_excel_projs.copy()
+                        
+                        if "Unnamed" in str(df_proj.columns[0]):
+                            df_proj.columns = df_proj.iloc[0]
+                            df_proj = df_proj[1:].reset_index(drop=True)
+                            
+                        df_proj.columns = [
+                            str(col).strip().replace("\n", " ").replace(" ", "_").lower() 
+                            for col in df_proj.columns
+                        ]
+                        
+                        df_proj["company_name"] = default_company
+                        df_proj["scenario_name"] = default_scenario
+                        
+                        # Guardar en MySQL
+                        df_proj.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
 
-                    st.success("✅ ¡Toda la data del Excel fue insertada en las tablas de MySQL!")
+                    st.success("✅ ¡Toda la data del Excel fue limpiada e insertada en MySQL!")
                 except Exception as err:
                     st.error(f"❌ Error en INSERT INTO MySQL: {err}")
     # -------------------------------------------------------------------------
