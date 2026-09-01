@@ -6,7 +6,8 @@ from dcf_models import DCFInputs
 import re
 import unicodedata
 # Importar la función desde el controlador de DCF
-from dcf_controller import calculate_dcf
+# En modules/mod_dcf.py
+from dcf_controller import DCFController, get_sqlalchemy_engine
 
 def render():
     st.title("📊 Modelo de Valoración por Flujo de Caja Descontado (DCF)")
@@ -284,7 +285,7 @@ def render():
             db_inputs_dict = {}
 
             try:
-                from dcf_controller import calculate_dcf, get_sqlalchemy_engine
+                from dcf_controller import DCFController, get_sqlalchemy_engine
 
                 engine = get_sqlalchemy_engine()
 
@@ -331,7 +332,7 @@ def render():
 
             except Exception as db_err:
                 st.warning(f"⚠️ No se pudo consultar la base de datos (se usarán datos locales): {db_err}")
-                from dcf_controller import calculate_dcf
+                from dcf_controller import DCFController
 
             # Asignar variables activas priorizando MySQL > session_state > default
             active_growth_rates = (
@@ -354,17 +355,17 @@ def render():
             g_val = float(db_inputs_dict.get("terminal_growth_rate", st.session_state.get("terminal_growth_rate", default_g)))
             debt_val = float(db_inputs_dict.get("net_debt", st.session_state.get("net_debt", default_debt)))
 
-            # Recalcular el modelo DCF con la data leída de MySQL
-            results = calculate_dcf(
-                revenue=rev_val,
+            # Recalcular el modelo DCF con la data leída de MySQL usando DCFController
+            results = DCFController.run_valuation(
+                historical_revenue=rev_val,
                 growth_rates=active_growth_rates,
                 ebit_margins=active_ebit_margins,
                 tax_rate=tax_val,
-                capex_pct=capex_val,
-                nwc_pct=nwc_val,
-                da_pct=da_val,
+                capex_percent=capex_val,
+                nwc_percent=nwc_val,
+                da_percent=da_val,
                 wacc=wacc_val,
-                g=g_val,
+                terminal_growth_rate=g_val,
                 net_debt=debt_val,
             )
 
