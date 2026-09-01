@@ -5,6 +5,8 @@ from dcf_controller import DCFController
 from dcf_models import DCFInputs
 import re
 import unicodedata
+# Importar la función desde el controlador de DCF
+from dcf_controller import calculate_dcf
 
 def render():
     st.title("📊 Modelo de Valoración por Flujo de Caja Descontado (DCF)")
@@ -271,9 +273,6 @@ def render():
         years_labels = [f"Año {i+1}" for i in range(num_years)]
 
         # =========================================================================
-        # TABLA / PESTAÑA 2: MÉTRICAS DE VALORACIÓN Y TABLA DE FLUJOS (FCFF)
-        # =========================================================================
-        # =========================================================================
         # TABLA / PESTAÑA 2: RESULTADOS Y FCFF
         # =========================================================================
         with tab2:
@@ -285,7 +284,7 @@ def render():
             db_inputs_dict = {}
 
             try:
-                from dcf_controller import get_sqlalchemy_engine
+                from dcf_controller import calculate_dcf, get_sqlalchemy_engine
 
                 engine = get_sqlalchemy_engine()
 
@@ -297,7 +296,6 @@ def render():
                 )
 
                 if not df_db_inputs.empty:
-                    # Detectar columnas de parámetros y valores
                     col_p = (
                         [c for c in df_db_inputs.columns if c in ["parametro", "concepto", "key", "variable"]][0]
                         if any(c in df_db_inputs.columns for c in ["parametro", "concepto", "key", "variable"])
@@ -333,6 +331,7 @@ def render():
 
             except Exception as db_err:
                 st.warning(f"⚠️ No se pudo consultar la base de datos (se usarán datos locales): {db_err}")
+                from dcf_controller import calculate_dcf
 
             # Asignar variables activas priorizando MySQL > session_state > default
             active_growth_rates = (
