@@ -5,3 +5,4 @@ altair
 mysql-connector-python
 pymysql
 cryptography
+yfinance
