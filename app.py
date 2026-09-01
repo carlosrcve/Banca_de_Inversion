@@ -69,19 +69,37 @@ if module == "📊 Modelo DCF & M&A":
     default_debt = 200000.0
 
     # Si el usuario sube un archivo Excel
-    # Si el usuario sube un archivo Excel
     if uploaded_file is not None:
         try:
             excel_file = pd.ExcelFile(uploaded_file)
             sheet_names = excel_file.sheet_names
 
-            # 1. Cargar Entradas / Parámetros (busca 'Inputs' o usa la primera hoja disponible)
+            # 1. Cargar Entradas / Parámetros
             inputs_sheet = "Inputs" if "Inputs" in sheet_names else sheet_names[0]
             df_inputs = pd.read_excel(excel_file, sheet_name=inputs_sheet)
             
-            # Limpiar nombres de columnas eliminando espacios
+            # Normalizar nombres de columnas (quitar espacios alrededor)
             df_inputs.columns = [str(col).strip() for col in df_inputs.columns]
-            inputs_dict = dict(zip(df_inputs["Parametro"], df_inputs["Valor"]))
+
+            # Detectar cuál columna corresponde a los parámetros y cuál a los valores
+            param_col = None
+            val_col = None
+
+            for col in df_inputs.columns:
+                col_clean = col.lower().replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+                if col_clean in ["parametro", "parametros", "variable", "variables", "concept", "concepto", "key"]:
+                    param_col = col
+                elif col_clean in ["valor", "valores", "value", "values", "monto"]:
+                    val_col = col
+
+            # Asignación por defecto si no detecta los nombres exactos
+            if not param_col:
+                param_col = df_inputs.columns[0]
+            if not val_col:
+                val_col = df_inputs.columns[1] if len(df_inputs.columns) > 1 else df_inputs.columns[0]
+
+            # Crear el diccionario de insumos de manera segura
+            inputs_dict = dict(zip(df_inputs[param_col].astype(str).str.strip(), df_inputs[val_col]))
 
             default_company = str(inputs_dict.get("company_name", default_company))
             default_scenario = str(inputs_dict.get("scenario_name", default_scenario))
@@ -94,7 +112,7 @@ if module == "📊 Modelo DCF & M&A":
             default_g = float(inputs_dict.get("terminal_growth_rate", default_g))
             default_debt = float(inputs_dict.get("net_debt", default_debt))
 
-            # 2. Cargar Proyecciones (busca 'Projections' o usa la segunda hoja disponible)
+            # 2. Cargar Proyecciones Anuales
             if "Projections" in sheet_names:
                 proj_sheet = "Projections"
             elif len(sheet_names) > 1:
@@ -110,7 +128,7 @@ if module == "📊 Modelo DCF & M&A":
                 default_growth = df_projs["growth_rate"].tolist()
                 default_ebit = df_projs["ebit_margin"].tolist()
 
-            st.sidebar.success(f"✅ Archivo cargado usando las hojas: '{inputs_sheet}' y '{proj_sheet}'")
+            st.sidebar.success(f"✅ Archivo cargado correctamente ({inputs_sheet} / {proj_sheet})")
         except Exception as e:
             st.sidebar.error(f"❌ Error al procesar Excel: {e}")
     # -------------------------------------------------------------------------
