@@ -1,5 +1,15 @@
 # portfolio_controller.py
-from .db import get_db_connection  # <--- Cambia "from db import" por "from .db import"
+import sys
+import os
+
+# Asegura que la raíz del proyecto esté en el path de Python
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+try:
+    from db import get_db_connection
+except ImportError:
+    from .db import get_db_connection
+
 class PortfolioController:
 
     @staticmethod
