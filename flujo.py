@@ -75,10 +75,16 @@ Módulo de Análisis Geoscatelital/Alternativo: Consultas automáticas a APIs de
 
 
 https://gylfisoftware-bancadeinversion.streamlit.app/
-
+https://github.com/carlosrcve/Banca_de_Inversion/
 https://share.streamlit.io/
 cd "C:\Users\Carlos Rodriguez\Desktop\Banca_de_Inversion"
 
+
 git add app.py
-git commit -m "Fix: Corregir IndentationError en app.py"
+git commit -m "Feat: Add Excel upload functionality to DCF valuation module"
+git push origin main
+
+
+git add requirements.txt
+git commit -m "Fix: Add sqlalchemy and pymysql to requirements.txt"
 git push origin main
