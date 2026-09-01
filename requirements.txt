@@ -1,5 +1,6 @@
 streamlit
 pandas
 numpy
-scipy
-mysql-connector-python
+altair
+pymysql
+cryptography
