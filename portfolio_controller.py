@@ -1,14 +1,12 @@
 # portfolio_controller.py
-import sys
 import os
+import sys
 
-# Asegura que la raíz del proyecto esté en el path de Python
+# Garantiza que el directorio raíz esté en el path de ejecución
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-try:
-    from db import get_db_connection
-except ImportError:
-    from .db import get_db_connection
+from db import get_db_connection
+
 
 class PortfolioController:
 
