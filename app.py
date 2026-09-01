@@ -1,9 +1,9 @@
 # app.py
-from dcf_controller import DCFController
-from dcf_models import DCFInputs
 import numpy as np
 import pandas as pd
 import streamlit as st
+from dcf_controller import DCFController
+from dcf_models import DCFInputs
 
 # -----------------------------------------------------------------------------
 # 1. CONFIGURACIÓN DE LA PÁGINA
@@ -56,28 +56,28 @@ ebit_margins = []
 
 cols_years = st.sidebar.columns(2)
 with cols_years[0]:
-  st.caption("Crecimiento (%)")
+    st.caption("Crecimiento (%)")
 with cols_years[1]:
-  st.caption("Margen EBIT (%)")
+    st.caption("Margen EBIT (%)")
 
 for i in range(num_years):
-  col1, col2 = st.sidebar.columns(2)
-  with col1:
-    g = (
-        col1.number_input(
-            f"Año {i+1} Crec.", value=5.0, step=0.5, key=f"g_{i}"
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        g = (
+            col1.number_input(
+                f"Año {i+1} Crec.", value=5.0, step=0.5, key=f"g_{i}"
+            )
+            / 100.0
         )
-        / 100.0
-    )
-    growth_rates.append(g)
-  with col2:
-    m = (
-        col2.number_input(
-            f"Año {i+1} EBIT", value=15.0, step=0.5, key=f"m_{i}"
+        growth_rates.append(g)
+    with col2:
+        m = (
+            col2.number_input(
+                f"Año {i+1} EBIT", value=15.0, step=0.5, key=f"m_{i}"
+            )
+            / 100.0
         )
-        / 100.0
-    )
-    ebit_margins.append(m)
+        ebit_margins.append(m)
 
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚙️ Supuestos Financieros & Tasa de Descuento")
@@ -115,137 +115,135 @@ net_debt = st.sidebar.number_input(
 # 3. EJECUCIÓN DEL CÁLCULO DCF
 # -----------------------------------------------------------------------------
 try:
-  results = DCFController.run_valuation(
-      historical_revenue=historical_revenue,
-      growth_rates=growth_rates,
-      ebit_margins=ebit_margins,
-      tax_rate=tax_rate,
-      capex_percent=capex_percent,
-      nwc_percent=nwc_percent,
-      da_percent=da_percent,
-      wacc=wacc,
-      terminal_growth_rate=terminal_growth_rate,
-      net_debt=net_debt,
-  )
+    results = DCFController.run_valuation(
+        historical_revenue=historical_revenue,
+        growth_rates=growth_rates,
+        ebit_margins=ebit_margins,
+        tax_rate=tax_rate,
+        capex_percent=capex_percent,
+        nwc_percent=nwc_percent,
+        da_percent=da_percent,
+        wacc=wacc,
+        terminal_growth_rate=terminal_growth_rate,
+        net_debt=net_debt,
+    )
 
-  # Reconstrucción de inputs para guardado posterior
-  current_inputs = DCFInputs(
-      historical_revenue=historical_revenue,
-      growth_rates=growth_rates,
-      ebit_margins=ebit_margins,
-      tax_rate=tax_rate,
-      capex_percent=capex_percent,
-      nwc_percent=nwc_percent,
-      da_percent=da_percent,
-      wacc=wacc,
-      terminal_growth_rate=terminal_growth_rate,
-      net_debt=net_debt,
-  )
+    # Reconstrucción de inputs para guardado posterior
+    current_inputs = DCFInputs(
+        historical_revenue=historical_revenue,
+        growth_rates=growth_rates,
+        ebit_margins=ebit_margins,
+        tax_rate=tax_rate,
+        capex_percent=capex_percent,
+        nwc_percent=nwc_percent,
+        da_percent=da_percent,
+        wacc=wacc,
+        terminal_growth_rate=terminal_growth_rate,
+        net_debt=net_debt,
+    )
 
-  # -------------------------------------------------------------------------
-  # 4. PRESENTACIÓN DE RESULTADOS
-  # -------------------------------------------------------------------------
-  col_res1, col_res2, col_res3 = st.columns(3)
-  col_res1.metric(
-      label="🏢 Enterprise Value (EV)",
-      value=f"${results.enterprise_value:,.2f}",
-  )
-  col_res2.metric(
-      label="💵 Equity Value (Patrimonio)",
-      value=f"${results.equity_value:,.2f}",
-  )
-  col_res3.metric(
-      label="🌐 Valor Presente TV",
-      value=f"${results.pv_terminal_value:,.2f}",
-  )
+    # -------------------------------------------------------------------------
+    # 4. PRESENTACIÓN DE RESULTADOS
+    # -------------------------------------------------------------------------
+    col_res1, col_res2, col_res3 = st.columns(3)
+    col_res1.metric(
+        label="🏢 Enterprise Value (EV)",
+        value=f"${results.enterprise_value:,.2f}",
+    )
+    col_res2.metric(
+        label="💵 Equity Value (Patrimonio)",
+        value=f"${results.equity_value:,.2f}",
+    )
+    col_res3.metric(
+        label="🌐 Valor Presente TV",
+        value=f"${results.pv_terminal_value:,.2f}",
+    )
 
-  st.markdown("---")
-  st.subheader("📋 Tabla Proyectada de Flujos de Caja (FCFF)")
+    st.markdown("---")
+    st.subheader("📋 Tabla Proyectada de Flujos de Caja (FCFF)")
 
-  # Creación de DataFrame con los detalles por año
-  years_labels = [f"Año {i+1}" for i in range(num_years)]
-  df_projections = pd.DataFrame({
-      "Año": years_labels,
-      "Tasa Crec. (%)": [g * 100 for g in growth_rates],
-      "Margen EBIT (%)": [m * 100 for m in ebit_margins],
-      "Ingresos Proyectados ($)": results.projected_revenues,
-      "EBIT ($)": results.projected_ebit,
-      "NOPAT ($)": results.projected_nopat,
-      "Flujo Caja Libre (FCF) ($)": results.free_cash_flows,
-      "PV FCF ($)": results.pv_cash_flows,
-  })
+    # Creación de DataFrame con los detalles por año
+    years_labels = [f"Año {i+1}" for i in range(num_years)]
+    df_projections = pd.DataFrame({
+        "Año": years_labels,
+        "Tasa Crec. (%)": [g * 100 for g in growth_rates],
+        "Margen EBIT (%)": [m * 100 for m in ebit_margins],
+        "Ingresos Proyectados ($)": results.projected_revenues,
+        "EBIT ($)": results.projected_ebit,
+        "NOPAT ($)": results.projected_nopat,
+        "Flujo Caja Libre (FCF) ($)": results.free_cash_flows,
+        "PV FCF ($)": results.pv_cash_flows,
+    })
 
-  st.dataframe(
-      df_projections.style.format({
-          "Tasa Crec. (%)": "{:.2f}%",
-          "Margen EBIT (%)": "{:.2f}%",
-          "Ingresos Proyectados ($)": "${:,.2f}",
-          "EBIT ($)": "${:,.2f}",
-          "NOPAT ($)": "${:,.2f}",
-          "Flujo Caja Libre (FCF) ($)": "${:,.2f}",
-          "PV FCF ($)": "${:,.2f}",
-      }),
-      use_container_width=True,
-  )
+    st.dataframe(
+        df_projections.style.format({
+            "Tasa Crec. (%)": "{:.2f}%",
+            "Margen EBIT (%)": "{:.2f}%",
+            "Ingresos Proyectados ($)": "${:,.2f}",
+            "EBIT ($)": "${:,.2f}",
+            "NOPAT ($)": "${:,.2f}",
+            "Flujo Caja Libre (FCF) ($)": "${:,.2f}",
+            "PV FCF ($)": "${:,.2f}",
+        }),
+        use_container_width=True,
+    )
 
-  # -------------------------------------------------------------------------
-  # Restauración del gráfico original de barras (PV FCF)
-  # -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Restauración del gráfico original de barras (PV FCF)
+    # -------------------------------------------------------------------------
     st.subheader("Valor Presente de Flujos Proyectados")
 
-    # DataFrame con índice 'Año' configurado para el gráfico de barras nativo
     df_chart = pd.DataFrame({
         "Año": years_labels,
-        "PV FCF": [float(val) for val in results.pv_cash_flows]
+        "PV FCF": [float(val) for val in results.pv_cash_flows],
     }).set_index("Año")
 
-    # Renderizar el gráfico de barras de Streamlit
     st.bar_chart(df_chart)
 
-  # -------------------------------------------------------------------------
-  # 5. PERSISTENCIA EN TIDB CLOUD / MYSQL
-  # -------------------------------------------------------------------------
-  st.markdown("---")
-  st.subheader("💾 Guardar y Consultar Valoraciones")
+    # -------------------------------------------------------------------------
+    # 5. PERSISTENCIA EN TIDB CLOUD / MYSQL
+    # -------------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("💾 Guardar y Consultar Valoraciones")
 
-  col_btn, col_history = st.columns([1, 2])
+    col_btn, col_history = st.columns([1, 2])
 
-  with col_btn:
-    st.write("#### Guardar Escenario Actual")
-    if st.button("💾 Guardar en Base de Datos", type="primary"):
-      success = DCFController.save_valuation(
-          company_name=company_name,
-          scenario_name=scenario_name,
-          inputs=current_inputs,
-          results=results,
-      )
-      if success:
-        st.success(
-            f"✅ Escenario '{scenario_name}' guardado exitosamente en TiDB"
-            " Cloud."
-        )
-      else:
-        st.error(
-            "❌ Ocurrió un error al intentar guardar en la base de datos."
-        )
+    with col_btn:
+        st.write("#### Guardar Escenario Actual")
+        if st.button("💾 Guardar en Base de Datos", type="primary"):
+            success = DCFController.save_valuation(
+                company_name=company_name,
+                scenario_name=scenario_name,
+                inputs=current_inputs,
+                results=results,
+            )
+            if success:
+                st.success(
+                    f"✅ Escenario '{scenario_name}' guardado exitosamente en TiDB"
+                    " Cloud."
+                )
+            else:
+                st.error(
+                    "❌ Ocurrió un error al intentar guardar en la base de datos."
+                )
 
-  with col_history:
-    st.write("#### Escenarios Guardados de la Empresa")
-    if st.button("🔄 Consultar Historial"):
-      scenarios = DCFController.get_saved_scenarios(company_name)
-      if scenarios:
-        df_scenarios = pd.DataFrame(scenarios)
-        st.dataframe(
-            df_scenarios.style.format({
-                "enterprise_value": "${:,.2f}",
-                "equity_value": "${:,.2f}",
-            }),
-            use_container_width=True,
-        )
-      else:
-        st.info(
-            f"No se encontraron escenarios registrados para '{company_name}'."
-        )
+    with col_history:
+        st.write("#### Escenarios Guardados de la Empresa")
+        if st.button("🔄 Consultar Historial"):
+            scenarios = DCFController.get_saved_scenarios(company_name)
+            if scenarios:
+                df_scenarios = pd.DataFrame(scenarios)
+                st.dataframe(
+                    df_scenarios.style.format({
+                        "enterprise_value": "${:,.2f}",
+                        "equity_value": "${:,.2f}",
+                    }),
+                    use_container_width=True,
+                )
+            else:
+                st.info(
+                    f"No se encontraron escenarios registrados para '{company_name}'."
+                )
 
 except Exception as e:
-  st.error(f"Error en los cálculos o en la ejecución: {e}")
+    st.error(f"Error en los cálculos o en la ejecución: {e}")
