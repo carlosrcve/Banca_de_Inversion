@@ -15,8 +15,21 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Inicializar URL de la Base de Datos (Soporte local secrets.toml y Render Env Vars)
+if "db_url" not in st.session_state:
+    try:
+        st.session_state.db_url = st.secrets["mysql"]["url"]
+    except (KeyError, FileNotFoundError):
+        st.session_state.db_url = os.environ.get("MYSQL_URL")
+
 st.sidebar.title("🏛️ Gylfi Software")
 st.sidebar.markdown("**Suite de Banca de Inversión**")
+
+# Estado de conexión en Sidebar
+if st.session_state.db_url:
+    st.sidebar.caption("🟢 Conectado a TiDB Cloud")
+else:
+    st.sidebar.caption("🔴 DB no configurada")
 
 # Menú de Navegación Lateral
 module = st.sidebar.radio(
