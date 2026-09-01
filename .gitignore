@@ -1,0 +1,9 @@
+Set-Content -Path .gitignore -Value @"
+# Secretos de Streamlit (credenciales de TiDB Cloud / MySQL)
+.streamlit/secrets.toml
+
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+.env
+"@
