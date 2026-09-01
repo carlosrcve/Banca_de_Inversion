@@ -5,7 +5,8 @@ import sys
 # Garantiza que el directorio raíz esté en el path de ejecución
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from db import get_db_connection
+from dcf_controller import get_db_connection
+
 
 
 class PortfolioController:
