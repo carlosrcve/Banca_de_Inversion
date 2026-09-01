@@ -41,13 +41,25 @@ def render():
 
     # =========================================================================
     # TABLA / PESTAÑA 1: CARGA DE ARCHIVOS EXCEL E INSERCIÓN A MYSQL
-    # =========================================================================
+    # ========================================================================
+    def clean_column_name(col_name: str) -> str:
+        """Limpia acentos, caracteres especiales, parentesis y espacios
+
+        para generar nombres de columnas 100% compatibles con SQL.
+        """
+        col = str(col_name).strip()
+        col = unicodedata.normalize("NFKD", col).encode("ASCII", "ignore").decode("utf-8")
+        col = re.sub(r"[^a-zA-Z0-9]+", "_", col)
+        col = re.sub(r"_+", "_", col).strip("_").lower()
+        return col if col else "columna_sin_nombre"
+
+
     with tab1:
         st.header("📥 Cargar Modelo desde Excel")
         st.markdown("""
         Sube la plantilla de Excel con las pestañas de **Inputs** y **Projections** para auto-completar los parámetros del modelo.
         """)
-        
+
         uploaded_file = st.file_uploader(
             "Subir archivo .xlsx / .xls",
             type=["xlsx", "xls"],
@@ -60,22 +72,29 @@ def render():
                 sheet_names = excel_file.sheet_names
 
                 inputs_sheet = "Inputs" if "Inputs" in sheet_names else sheet_names[0]
+
+                # 1. Intentar leer la pestaña de Inputs.
+                # Se usa header=1 si la primera fila está vacía como en tu estructura actual.
                 df_inputs = pd.read_excel(excel_file, sheet_name=inputs_sheet)
-                df_inputs.columns = [str(col).strip() for col in df_inputs.columns]
+                if df_inputs.columns[0].startswith("Unnamed"):
+                    df_inputs = pd.read_excel(excel_file, sheet_name=inputs_sheet, header=1)
+
+                df_inputs = df_inputs.dropna(how="all")
 
                 param_col, val_col = None, None
                 for col in df_inputs.columns:
-                    col_clean = (
-                        col.lower()
-                        .replace("á", "a")
-                        .replace("é", "e")
-                        .replace("í", "i")
-                        .replace("ó", "o")
-                        .replace("ú", "u")
-                    )
-                    if col_clean in ["parametro", "parametros", "variable", "variables", "concept", "concepto", "key"]:
+                    col_clean = clean_column_name(col)
+                    if col_clean in [
+                        "parametro",
+                        "parametros",
+                        "variable",
+                        "variables",
+                        "concept",
+                        "concepto",
+                        "key",
+                    ]:
                         param_col = col
-                    elif col_clean in ["valor", "valores", "value", "values", "monto"]:
+                    elif col_clean in ["valor", "valores", "value", "values", "monto", "monto_mensual"]:
                         val_col = col
 
                 if not param_col:
@@ -101,8 +120,12 @@ def render():
                     if "Projections" in sheet_names
                     else (sheet_names[1] if len(sheet_names) > 1 else sheet_names[0])
                 )
+
                 df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet)
-                df_projs.columns = [str(col).strip() for col in df_projs.columns]
+                if df_projs.columns[0].startswith("Unnamed"):
+                    df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet, header=1)
+
+                df_projs = df_projs.dropna(how="all")
 
                 if "growth_rate" in df_projs.columns and "ebit_margin" in df_projs.columns:
                     default_years = len(df_projs)
@@ -118,54 +141,46 @@ def render():
                 st.error(f"❌ Error al procesar Excel: {e}")
 
         # Guardar data cruda en MySQL desde tab1
-        # Guardar data cruda en MySQL desde tab1
-        if st.session_state.df_excel_inputs is not None or st.session_state.df_excel_projs is not None:
+        if st.session_state.get("df_excel_inputs") is not None or st.session_state.get("df_excel_projs") is not None:
             st.markdown("---")
             if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
                 try:
                     from dcf_controller import get_sqlalchemy_engine
-                    
+
                     engine = get_sqlalchemy_engine()
 
-                    # 1. Procesar df_excel_inputs
+                    # 1. Procesar y guardar df_excel_inputs
                     if st.session_state.df_excel_inputs is not None:
                         df_inp = st.session_state.df_excel_inputs.copy()
-                        
-                        # Si la primera fila contiene los encabezados reales ("Categoría", "Concepto", etc.)
-                        if "Unnamed" in str(df_inp.columns[0]):
-                            df_inp.columns = df_inp.iloc[0]  # Tomar la primera fila como nombre de columnas
-                            df_inp = df_inp[1:].reset_index(drop=True)  # Eliminar la fila promovida
-                        
-                        # Limpiar nombres de columnas (quitar espacios, saltos de línea y caracteres especiales)
-                        df_inp.columns = [
-                            str(col).strip().replace("\n", " ").replace(" ", "_").lower() 
-                            for col in df_inp.columns
-                        ]
-                        
+
+                        # Limpiar nombres de columnas para compatibilidad SQL
+                        df_inp.columns = [clean_column_name(col) for col in df_inp.columns]
+
+                        # Convertir formato numérico (comas decimales a puntos)
+                        for col in df_inp.columns:
+                            if df_inp[col].dtype == "object":
+                                df_inp[col] = df_inp[col].astype(str).str.replace(",", ".", regex=False)
+
                         df_inp["company_name"] = default_company
                         df_inp["scenario_name"] = default_scenario
-                        
-                        # Guardar en MySQL
-                        df_inp.to_sql("excel_inputs_raw", con=engine, if_exists="append", index=False)
 
-                    # 2. Procesar df_excel_projs
+                        # Se utiliza replace para evitar descalces en la definición previa de columnas
+                        df_inp.to_sql("excel_inputs_raw", con=engine, if_exists="replace", index=False)
+
+                    # 2. Procesar y guardar df_excel_projs
                     if st.session_state.df_excel_projs is not None:
                         df_proj = st.session_state.df_excel_projs.copy()
-                        
-                        if "Unnamed" in str(df_proj.columns[0]):
-                            df_proj.columns = df_proj.iloc[0]
-                            df_proj = df_proj[1:].reset_index(drop=True)
-                            
-                        df_proj.columns = [
-                            str(col).strip().replace("\n", " ").replace(" ", "_").lower() 
-                            for col in df_proj.columns
-                        ]
-                        
+
+                        df_proj.columns = [clean_column_name(col) for col in df_proj.columns]
+
+                        for col in df_proj.columns:
+                            if df_proj[col].dtype == "object":
+                                df_proj[col] = df_proj[col].astype(str).str.replace(",", ".", regex=False)
+
                         df_proj["company_name"] = default_company
                         df_proj["scenario_name"] = default_scenario
-                        
-                        # Guardar en MySQL
-                        df_proj.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
+
+                        df_proj.to_sql("excel_projections_raw", con=engine, if_exists="replace", index=False)
 
                     st.success("✅ ¡Toda la data del Excel fue limpiada e insertada en MySQL!")
                 except Exception as err:
