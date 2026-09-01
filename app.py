@@ -69,10 +69,18 @@ if module == "📊 Modelo DCF & M&A":
     default_debt = 200000.0
 
     # Si el usuario sube un archivo Excel
+    # Si el usuario sube un archivo Excel
     if uploaded_file is not None:
         try:
-            # Lectura de la pestaña de Parámetros/Supuestos
-            df_inputs = pd.read_excel(uploaded_file, sheet_name="Inputs")
+            excel_file = pd.ExcelFile(uploaded_file)
+            sheet_names = excel_file.sheet_names
+
+            # 1. Cargar Entradas / Parámetros (busca 'Inputs' o usa la primera hoja disponible)
+            inputs_sheet = "Inputs" if "Inputs" in sheet_names else sheet_names[0]
+            df_inputs = pd.read_excel(excel_file, sheet_name=inputs_sheet)
+            
+            # Limpiar nombres de columnas eliminando espacios
+            df_inputs.columns = [str(col).strip() for col in df_inputs.columns]
             inputs_dict = dict(zip(df_inputs["Parametro"], df_inputs["Valor"]))
 
             default_company = str(inputs_dict.get("company_name", default_company))
@@ -86,16 +94,25 @@ if module == "📊 Modelo DCF & M&A":
             default_g = float(inputs_dict.get("terminal_growth_rate", default_g))
             default_debt = float(inputs_dict.get("net_debt", default_debt))
 
-            # Lectura de las Proyecciones Anuales
-            df_projs = pd.read_excel(uploaded_file, sheet_name="Projections")
-            default_years = len(df_projs)
-            default_growth = df_projs["growth_rate"].tolist()
-            default_ebit = df_projs["ebit_margin"].tolist()
+            # 2. Cargar Proyecciones (busca 'Projections' o usa la segunda hoja disponible)
+            if "Projections" in sheet_names:
+                proj_sheet = "Projections"
+            elif len(sheet_names) > 1:
+                proj_sheet = sheet_names[1]
+            else:
+                proj_sheet = sheet_names[0]
 
-            st.sidebar.success("✅ Archivo Excel cargado correctamente.")
+            df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet)
+            df_projs.columns = [str(col).strip() for col in df_projs.columns]
+
+            if "growth_rate" in df_projs.columns and "ebit_margin" in df_projs.columns:
+                default_years = len(df_projs)
+                default_growth = df_projs["growth_rate"].tolist()
+                default_ebit = df_projs["ebit_margin"].tolist()
+
+            st.sidebar.success(f"✅ Archivo cargado usando las hojas: '{inputs_sheet}' y '{proj_sheet}'")
         except Exception as e:
             st.sidebar.error(f"❌ Error al procesar Excel: {e}")
-
     # -------------------------------------------------------------------------
     # RENDERIZADO DE INTERFAZ EN SIDEBAR
     # -------------------------------------------------------------------------
