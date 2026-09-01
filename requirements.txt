@@ -2,5 +2,6 @@ streamlit
 pandas
 numpy
 altair
+mysql-connector-python
 pymysql
 cryptography
