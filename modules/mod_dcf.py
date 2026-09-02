@@ -3,7 +3,7 @@ import re
 import unicodedata
 import pandas as pd
 import streamlit as st
-from sqlalchemy import create_engine
+from sqlalchemy import text
 
 # Importaciones del módulo controller
 from dcf_controller import DCFController, get_sqlalchemy_engine
@@ -17,6 +17,16 @@ def clean_column_name(col_name: str) -> str:
     col = re.sub(r"[^a-zA-Z0-9]+", "_", col)
     col = re.sub(r"_+", "_", col).strip("_").lower()
     return col if col else "columna_sin_nombre"
+
+
+def safe_float(val, default_val=0.0):
+    """Convierte un valor a float de manera segura sin lanzar excepciones."""
+    if val is None or pd.isna(val):
+        return float(default_val)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return float(default_val)
 
 
 def render():
@@ -71,22 +81,23 @@ def render():
 
                 df_inputs = df_inputs.dropna(how="all")
 
+                # Detectar columnas clave
                 param_col = next((c for c in df_inputs.columns if clean_column_name(c) in ["parametro", "parametros", "variable", "concept", "concepto", "key"]), df_inputs.columns[0])
                 val_col = next((c for c in df_inputs.columns if clean_column_name(c) in ["valor", "valores", "value", "monto", "monto_mensual"]), df_inputs.columns[1] if len(df_inputs.columns) > 1 else df_inputs.columns[0])
 
                 inputs_dict = dict(zip(df_inputs[param_col].astype(str).str.strip(), df_inputs[val_col]))
 
-                # Guardar en session_state
+                # Cargar variables a session_state
                 st.session_state["company_name"] = str(inputs_dict.get("company_name", default_company))
                 st.session_state["scenario_name"] = str(inputs_dict.get("scenario_name", default_scenario))
-                st.session_state["historical_revenue"] = float(inputs_dict.get("historical_revenue", default_revenue))
-                st.session_state["tax_rate"] = float(inputs_dict.get("tax_rate", default_tax))
-                st.session_state["capex_percent"] = float(inputs_dict.get("capex_percent", default_capex))
-                st.session_state["nwc_percent"] = float(inputs_dict.get("nwc_percent", default_nwc))
-                st.session_state["da_percent"] = float(inputs_dict.get("da_percent", default_da))
-                st.session_state["wacc"] = float(inputs_dict.get("wacc", default_wacc))
-                st.session_state["terminal_growth_rate"] = float(inputs_dict.get("terminal_growth_rate", default_g))
-                st.session_state["net_debt"] = float(inputs_dict.get("net_debt", default_debt))
+                st.session_state["historical_revenue"] = safe_float(inputs_dict.get("historical_revenue"), default_revenue)
+                st.session_state["tax_rate"] = safe_float(inputs_dict.get("tax_rate"), default_tax)
+                st.session_state["capex_percent"] = safe_float(inputs_dict.get("capex_percent"), default_capex)
+                st.session_state["nwc_percent"] = safe_float(inputs_dict.get("nwc_percent"), default_nwc)
+                st.session_state["da_percent"] = safe_float(inputs_dict.get("da_percent"), default_da)
+                st.session_state["wacc"] = safe_float(inputs_dict.get("wacc"), default_wacc)
+                st.session_state["terminal_growth_rate"] = safe_float(inputs_dict.get("terminal_growth_rate"), default_g)
+                st.session_state["net_debt"] = safe_float(inputs_dict.get("net_debt"), default_debt)
 
                 proj_sheet = "Projections" if "Projections" in sheet_names else (sheet_names[1] if len(sheet_names) > 1 else sheet_names[0])
                 df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet)
@@ -98,30 +109,32 @@ def render():
 
                 if "growth_rate" in df_projs.columns and "ebit_margin" in df_projs.columns:
                     st.session_state["proj_years"] = len(df_projs)
-                    st.session_state["growth_rates"] = [float(x) for x in df_projs["growth_rate"].tolist()]
-                    st.session_state["ebit_margins"] = [float(x) for x in df_projs["ebit_margin"].tolist()]
+                    st.session_state["growth_rates"] = [safe_float(x, 0.05) for x in df_projs["growth_rate"].tolist()]
+                    st.session_state["ebit_margins"] = [safe_float(x, 0.15) for x in df_projs["ebit_margin"].tolist()]
 
                 st.session_state.df_excel_inputs = df_inputs
                 st.session_state.df_excel_projs = df_projs
-                st.success(f"✅ Archivo cargado correctamente ({inputs_sheet} / {proj_sheet})")
+                st.success(f"✅ Archivo procesado correctamente ({inputs_sheet} / {proj_sheet})")
 
             except Exception as e:
-                st.error(f"❌ Error al procesar Excel: {e}")
+                st.error(f"❌ Error al procesar el archivo Excel: {e}")
 
-            if st.session_state.get("df_excel_inputs") is not None or st.session_state.get("df_excel_projs") is not None:
-                st.markdown("---")
-                if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
-                    try:
-                        engine = get_sqlalchemy_engine()
+        # Sección para persistir en MySQL los datos crudos del Excel
+        if st.session_state.get("df_excel_inputs") is not None or st.session_state.get("df_excel_projs") is not None:
+            st.markdown("---")
+            if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
+                try:
+                    engine = get_sqlalchemy_engine()
+                    company_name = st.session_state.get("company_name", default_company)
+                    scenario_name = st.session_state.get("scenario_name", default_scenario)
 
-                        # 1. Obtener company_name y scenario_name desde st.session_state
-                        company_name = st.session_state.get("company_name", default_company)
-                        scenario_name = st.session_state.get("scenario_name", default_scenario)
+                    # 1. Guardar INPUTS en MySQL
+                    if st.session_state.get("df_excel_inputs") is not None:
+                        df_in = st.session_state.df_excel_inputs.copy()
 
-                        # 2. Guardar INPUTS en MySQL (respetando la tabla DDL: Parametro, Valor)
-                        if st.session_state.get("df_excel_inputs") is not None:
-                            df_in = st.session_state.df_excel_inputs.copy()
-                            
+                        if "company_name" in df_in.columns and "Parametro" in df_in.columns:
+                            df_in_to_save = df_in
+                        else:
                             param_col_in = next((c for c in df_in.columns if clean_column_name(c) in ["parametro", "parametros", "variable", "concept", "concepto", "key"]), df_in.columns[0])
                             val_col_in = next((c for c in df_in.columns if clean_column_name(c) in ["valor", "valores", "value", "monto", "monto_mensual"]), df_in.columns[1] if len(df_in.columns) > 1 else df_in.columns[0])
 
@@ -131,31 +144,33 @@ def render():
                                 "Parametro": df_in[param_col_in].astype(str),
                                 "Valor": df_in[val_col_in].astype(str)
                             })
-                            
-                            df_in_to_save.to_sql("excel_inputs_raw", con=engine, if_exists="append", index=False)
 
-                        # 3. Guardar PROYECCIONES en MySQL (respetando la tabla DDL: year, growth_rate, ebit_margin)
-                        if st.session_state.get("df_excel_projs") is not None:
-                            df_proj = st.session_state.df_excel_projs.copy()
-                            df_proj.columns = [str(c).strip().lower() for c in df_proj.columns]
-                            
+                        df_in_to_save.to_sql("excel_inputs_raw", con=engine, if_exists="append", index=False)
+
+                    # 2. Guardar PROYECCIONES en MySQL
+                    if st.session_state.get("df_excel_projs") is not None:
+                        df_proj = st.session_state.df_excel_projs.copy()
+
+                        if "company_name" in df_proj.columns and "year" in df_proj.columns:
+                            df_to_save = df_proj
+                        else:
                             col_g = next((c for c in df_proj.columns if "growth" in c or "crec" in c), df_proj.columns[0])
                             col_m = next((c for c in df_proj.columns if "ebit" in c or "marg" in c), df_proj.columns[1] if len(df_proj.columns) > 1 else df_proj.columns[0])
-                            
+
                             df_to_save = pd.DataFrame({
                                 "company_name": [company_name] * len(df_proj),
                                 "scenario_name": [scenario_name] * len(df_proj),
-                                "year": range(1, len(df_proj) + 1),
-                                "growth_rate": pd.to_numeric(df_proj[col_g], errors='coerce'),
-                                "ebit_margin": pd.to_numeric(df_proj[col_m], errors='coerce')
+                                "year": list(range(1, len(df_proj) + 1)),
+                                "growth_rate": pd.to_numeric(df_proj[col_g], errors="coerce").fillna(0.05),
+                                "ebit_margin": pd.to_numeric(df_proj[col_m], errors="coerce").fillna(0.15)
                             })
 
-                            df_to_save.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
-                            
-                        st.success("✅ ¡Inputs y Proyecciones guardados exitosamente en MySQL!")
+                        df_to_save.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
 
-                    except Exception as err:
-                        st.error(f"❌ Error al guardar en MySQL: {err}")
+                    st.success("✅ ¡Inputs y Proyecciones guardados exitosamente en MySQL!")
+
+                except Exception as err:
+                    st.error(f"❌ Error al guardar en MySQL: {err}")
 
     # -------------------------------------------------------------------------
     # CONTROLES SIDEBAR
@@ -182,10 +197,10 @@ def render():
         m_val = (saved_ebit[i] * 100) if i < len(saved_ebit) else 15.0
 
         with col1:
-            g = col1.number_input(f"Año {i+1} Crec.", value=float(g_val), step=0.5, key=f"g_{i}") / 100.0
+            g = col1.number_input(f"Año {i+1} Crec. (%)", value=float(g_val), step=0.5, key=f"g_{i}") / 100.0
             growth_rates.append(g)
         with col2:
-            m = col2.number_input(f"Año {i+1} EBIT", value=float(m_val), step=0.5, key=f"m_{i}") / 100.0
+            m = col2.number_input(f"Año {i+1} EBIT (%)", value=float(m_val), step=0.5, key=f"m_{i}") / 100.0
             ebit_margins.append(m)
 
     st.sidebar.markdown("---")
@@ -214,69 +229,51 @@ def render():
             wacc=wacc, terminal_growth_rate=terminal_growth_rate, net_debt=net_debt
         )
 
-        # TAB 2
+        # TAB 2: RESULTADOS
         with tab2:
             st.header("📊 Resultados de Valoración (Leídos desde MySQL)")
 
             try:
                 engine = get_sqlalchemy_engine()
 
-                # Obtener variables por defecto desde session_state o constantes predeterminadas
-                def_company = st.session_state.get("company_name", company_name if 'company_name' in locals() else "Empresa Demo")
-                def_scenario = st.session_state.get("scenario_name", scenario_name if 'scenario_name' in locals() else "Base")
-
-                # 1. Consultar Inputs desde MySQL
-                query_inputs = """
+                query_inputs = text("""
                     SELECT Parametro, Valor 
                     FROM excel_inputs_raw 
-                    WHERE company_name = %s AND scenario_name = %s
+                    WHERE company_name = :company AND scenario_name = :scenario
                     ORDER BY id ASC
-                """
-                df_db_inputs = pd.read_sql(query_inputs, con=engine, params=(def_company, def_scenario))
-
-                # 2. Consultar Proyecciones desde MySQL
-                query_projs = """
+                """)
+                
+                query_projs = text("""
                     SELECT year, growth_rate, ebit_margin 
                     FROM excel_projections_raw 
-                    WHERE company_name = %s AND scenario_name = %s
+                    WHERE company_name = :company AND scenario_name = :scenario
                     ORDER BY year ASC
-                """
-                df_db_projs = pd.read_sql(query_projs, con=engine, params=(def_company, def_scenario))
+                """)
+
+                df_db_inputs = pd.read_sql(query_inputs, con=engine, params={"company": company_name, "scenario": scenario_name})
+                df_db_projs = pd.read_sql(query_projs, con=engine, params={"company": company_name, "scenario": scenario_name})
 
                 if not df_db_inputs.empty and not df_db_projs.empty:
-                    # Función auxiliar para convertir a float seguro sin lanzar NoneType Exception
-                    def safe_float(val, default_val=0.0):
-                        if val is None or pd.isna(val):
-                            return float(default_val)
-                        try:
-                            return float(val)
-                        except (ValueError, TypeError):
-                            return float(default_val)
-
-                    # Diccionario de Inputs limpios
                     inputs_dict = dict(zip(
                         df_db_inputs["Parametro"].astype(str).str.strip().str.lower(), 
                         df_db_inputs["Valor"]
                     ))
 
-                    # Lectura defensiva de los Inputs
-                    db_historical_revenue = safe_float(inputs_dict.get("historical_revenue"), st.session_state.get("historical_revenue", 1000000.0))
-                    db_tax_rate = safe_float(inputs_dict.get("tax_rate"), st.session_state.get("tax_rate", 0.30))
-                    db_capex = safe_float(inputs_dict.get("capex_percent"), st.session_state.get("capex_percent", 0.05))
-                    db_nwc = safe_float(inputs_dict.get("nwc_percent"), st.session_state.get("nwc_percent", 0.10))
-                    db_da = safe_float(inputs_dict.get("da_percent"), st.session_state.get("da_percent", 0.03))
-                    db_wacc = safe_float(inputs_dict.get("wacc"), st.session_state.get("wacc", 0.10))
-                    db_g = safe_float(inputs_dict.get("terminal_growth_rate"), st.session_state.get("terminal_growth_rate", 0.025))
-                    db_debt = safe_float(inputs_dict.get("net_debt"), st.session_state.get("net_debt", 0.0))
+                    db_historical_revenue = safe_float(inputs_dict.get("historical_revenue"), historical_revenue)
+                    db_tax_rate = safe_float(inputs_dict.get("tax_rate"), tax_rate)
+                    db_capex = safe_float(inputs_dict.get("capex_percent"), capex_percent)
+                    db_nwc = safe_float(inputs_dict.get("nwc_percent"), nwc_percent)
+                    db_da = safe_float(inputs_dict.get("da_percent"), da_percent)
+                    db_wacc = safe_float(inputs_dict.get("wacc"), wacc)
+                    db_g = safe_float(inputs_dict.get("terminal_growth_rate"), terminal_growth_rate)
+                    db_debt = safe_float(inputs_dict.get("net_debt"), net_debt)
 
-                    # Lectura defensiva de las Proyecciones (Rellenar NaNs con 0.0)
                     df_db_projs["growth_rate"] = df_db_projs["growth_rate"].apply(lambda x: safe_float(x, 0.05))
                     df_db_projs["ebit_margin"] = df_db_projs["ebit_margin"].apply(lambda x: safe_float(x, 0.15))
 
                     db_growth_rates = df_db_projs["growth_rate"].tolist()
                     db_ebit_margins = df_db_projs["ebit_margin"].tolist()
 
-                    # Ejecutar modelo DCF
                     results_db = DCFController.run_valuation(
                         historical_revenue=db_historical_revenue,
                         growth_rates=db_growth_rates,
@@ -290,7 +287,6 @@ def render():
                         net_debt=db_debt
                     )
 
-                    # Desplegar métricas
                     col_res1, col_res2, col_res3 = st.columns(3)
                     col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
                     col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
@@ -298,7 +294,6 @@ def render():
 
                     st.markdown("---")
 
-                    # Tabla FCFF
                     df_projections = pd.DataFrame({
                         "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
                         "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
@@ -319,18 +314,21 @@ def render():
                     st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
 
                 else:
-                    st.warning(f"⚠️ No hay registros en MySQL para '{def_company}' / '{def_scenario}'.")
+                    st.warning(f"⚠️ No hay registros en MySQL para '{company_name}' / '{scenario_name}'. Se muestran los cálculos locales:")
+                    
+                    col_res1, col_res2, col_res3 = st.columns(3)
+                    col_res1.metric("🏢 Enterprise Value (EV)", f"${results.enterprise_value:,.2f}")
+                    col_res2.metric("💵 Equity Value (Patrimonio)", f"${results.equity_value:,.2f}")
+                    col_res3.metric("🌐 Valor Presente TV", f"${results.pv_terminal_value:,.2f}")
+
+                    st.session_state["active_pv_cash_flows"] = results.pv_cash_flows
 
             except Exception as db_err:
                 st.error(f"❌ Error al consultar MySQL: {db_err}")
 
-
-        # =========================================================================
-        # PESTAÑA 3: GRÁFICOS (DINÁMICOS SEGÚN MYSQL)
-        # =========================================================================
+        # TAB 3: GRÁFICOS
         with tab3:
-            st.header("📈 Análisis Gráfico (Basado en la DB)")
-            
+            st.header("📈 Análisis Gráfico")
             pv_flows = st.session_state.get("active_pv_cash_flows", None)
             if pv_flows:
                 df_chart = pd.DataFrame({
@@ -340,9 +338,9 @@ def render():
                 
                 st.bar_chart(df_chart)
             else:
-                st.info("Carga o consulta un escenario en la Pestaña 2 para visualizar el gráfico.")
+                st.info("Carga o consulta un escenario para visualizar el gráfico.")
 
-        # TAB 4
+        # TAB 4: HISTORIAL Y GUARDADO
         with tab4:
             st.header("💾 Gestión de Escenarios")
             col_btn, col_history = st.columns([1, 2])
@@ -352,19 +350,23 @@ def render():
                     try:
                         success = DCFController.save_valuation(company_name=company_name, scenario_name=scenario_name, inputs=current_inputs, results=results)
                         if success:
-                            st.success(f"✅ Escenario '{scenario_name}' guardado.")
+                            st.success(f"✅ Escenario '{scenario_name}' guardado correctamente.")
                     except Exception:
                         try:
                             engine = get_sqlalchemy_engine()
                             df_summary = pd.DataFrame([{
-                                "company_name": company_name, "scenario_name": scenario_name,
-                                "enterprise_value": results.enterprise_value, "equity_value": results.equity_value,
-                                "wacc": wacc, "terminal_growth_rate": terminal_growth_rate, "net_debt": net_debt
+                                "company_name": company_name, 
+                                "scenario_name": scenario_name,
+                                "enterprise_value": results.enterprise_value, 
+                                "equity_value": results.equity_value,
+                                "wacc": wacc, 
+                                "terminal_growth_rate": terminal_growth_rate, 
+                                "net_debt": net_debt
                             }])
                             df_summary.to_sql("dcf_valuations", con=engine, if_exists="append", index=False)
-                            st.success(f"✅ Guardado en 'dcf_valuations'.")
+                            st.success(f"✅ Guardado alternativo en 'dcf_valuations' realizado.")
                         except Exception as err:
-                            st.error(f"❌ Error en MySQL: {err}")
+                            st.error(f"❌ Error al guardar en MySQL: {err}")
 
             with col_history:
                 if st.button("🔄 Consultar Historial"):
@@ -375,4 +377,4 @@ def render():
                         st.info(f"Sin registros para '{company_name}'.")
 
     except Exception as e:
-        st.error(f"Error en la ejecución del modelo: {e}")
+        st.error(f"❌ Error durante la ejecución del modelo DCF: {e}")
