@@ -19,14 +19,19 @@ class PortfolioController:
         change_percent: float,
         currency: str = "USD",
     ) -> tuple[bool, str]:
-        """Inserta la cotización respetando la estructura real de valuations_db_banca_inversion."""
+        """Inserta la cotización y valida la base de datos activa."""
         conn = get_db_connection()
         if not conn:
             return False, "Error de conexión a la base de datos."
 
         try:
             cursor = conn.cursor()
-            # Consulta alineada con las columnas vistas en MySQL Workbench
+            
+            # Diagnóstico: Ver a qué base de datos se conectó Python realmente
+            cursor.execute("SELECT DATABASE();")
+            db_res = cursor.fetchone()
+            print(f"DEBUG CONEXIÓN - Base de datos activa: {db_res}")
+
             query = """
                 INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent, recorded_at)
                 VALUES (%s, %s, %s, %s, %s, %s, NOW())
@@ -43,9 +48,15 @@ class PortfolioController:
                 ),
             )
             conn.commit()
+            affected = cursor.rowcount
             cursor.close()
             conn.close()
-            return True, "Guardado con éxito."
+            
+            if affected > 0:
+                return True, f"Guardado OK (Filas: {affected}, BD: {db_res})"
+            else:
+                return False, "La consulta corrió pero no afectó ninguna fila."
+                
         except Exception as e:
             if conn:
                 try:
