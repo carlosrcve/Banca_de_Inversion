@@ -519,97 +519,166 @@ def render():
             st.info("Consulta un escenario válido en MySQL para visualizar el gráfico.")
 
     # -------------------------------------------------------------------------
-    # PESTAÑA 4: BASE DE DATOS E HISTORIAL
+    # PESTAÑA 4: GESTOR DOCUMENTAL EN LA NUBE
     # -------------------------------------------------------------------------
     with tab4:
         st.subheader("📁 Gestor Documental en la Nube")
-        st.markdown("Sube y administra comprobantes, transferencias, PDFs o archivos de Office de forma organizada.")
+        st.markdown(
+            "Sube y administra comprobantes, transferencias, PDFs o archivos de Office de forma organizada."
+        )
 
-        db_actual = st.session_state.get('DB_ACTUAL')
-        if not db_actual or db_actual == 'none':
-            st.warning("⚠️ Por favor, selecciona un Cliente/Empresa en la barra lateral o panel principal.")
+        engine = get_sqlalchemy_engine()
 
-        # Directorio base para almacenar los archivos por empresa
-        DIRECTORIO_SUBIDAS = "documentos_clientes"
-        dir_empresa = os.path.join(DIRECTORIO_SUBIDAS, str(db_actual))
-        os.makedirs(dir_empresa, exist_ok=True)
-
-        # --- FORMULARIO DE SUBIDA ---
-        with st.expander("📤 Subir Nuevo Documento", expanded=True):
-            col1, col2 = st.columns(2)
-            with col1:
-                categoria = st.selectbox(
-                    "Categoría del Documento", 
-                    ["Transferencia Bancaria", "Factura PDF", "Documento Legal", "Excel / Reporte", "Otro"],
-                    key="cat_select_dcf"
+        # Crear la tabla automáticamente si no existe en MySQL / TiDB
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("""
+                    CREATE TABLE IF NOT EXISTS documentos_cloud (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        empresa_db VARCHAR(100) NOT NULL,
+                        categoria VARCHAR(100) NOT NULL,
+                        nombre_archivo VARCHAR(255) NOT NULL,
+                        ruta_archivo VARCHAR(500) NOT NULL,
+                        fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
                 )
-            with col2:
-                archivos_subidos = st.file_uploader(
-                    "Selecciona los archivos", 
-                    type=["pdf", "docx", "xlsx", "xls", "png", "jpg", "jpeg", "txt", "csv"], 
-                    accept_multiple_files=True,
-                    key="doc_uploader_dcf"
-                )
+        except Exception as e:
+            st.error(f"Error al verificar la estructura de la base de datos: {e}")
 
-            if st.button("💾 Guardar Documentos en la Nube", type="primary", use_container_width=True, key="btn_guardar_doc_dcf"):
-                if archivos_subidos:
-                    conn_doc = conectar_db(db_actual)
-                    cursor = conn_doc.cursor() if conn_doc else None
-                    
-                    if cursor:
+        db_actual = st.session_state.get("DB_ACTUAL", company_name)
+        if not db_actual or db_actual == "none":
+            st.warning(
+                "⚠️ Por favor, selecciona un Cliente/Empresa en la barra lateral o panel principal."
+            )
+        else:
+            # Directorio base para almacenar los archivos por empresa
+            DIRECTORIO_SUBIDAS = "documentos_clientes"
+            dir_empresa = os.path.join(DIRECTORIO_SUBIDAS, str(db_actual))
+            os.makedirs(dir_empresa, exist_ok=True)
+
+            # --- FORMULARIO DE SUBIDA ---
+            with st.expander("📤 Subir Nuevo Documento", expanded=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    categoria = st.selectbox(
+                        "Categoría del Documento",
+                        [
+                            "Transferencia Bancaria",
+                            "Factura PDF",
+                            "Documento Legal",
+                            "Excel / Reporte",
+                            "Otro",
+                        ],
+                        key="cat_select_dcf",
+                    )
+                with col2:
+                    archivos_subidos = st.file_uploader(
+                        "Selecciona los archivos",
+                        type=[
+                            "pdf",
+                            "docx",
+                            "xlsx",
+                            "xls",
+                            "png",
+                            "jpg",
+                            "jpeg",
+                            "txt",
+                            "csv",
+                        ],
+                        accept_multiple_files=True,
+                        key="doc_uploader_dcf",
+                    )
+
+                if st.button(
+                    "💾 Guardar Documentos en la Nube",
+                    type="primary",
+                    use_container_width=True,
+                    key="btn_guardar_doc_dcf",
+                ):
+                    if archivos_subidos:
                         try:
                             archivos_guardados = 0
                             for archivo in archivos_subidos:
-                                # Evitar colisiones de nombres usando timestamp
-                                timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                timestamp_str = datetime.now().strftime(
+                                    "%Y%m%d_%H%M%S"
+                                )
                                 nombre_limpio = f"{timestamp_str}_{archivo.name}"
-                                ruta_completa = os.path.join(dir_empresa, nombre_limpio)
-                                
+                                ruta_completa = os.path.join(
+                                    dir_empresa, nombre_limpio
+                                )
+
                                 # Guardar archivo en disco
                                 with open(ruta_completa, "wb") as f:
                                     f.write(archivo.getbuffer())
-                                
-                                # Insertar registro en MySQL
-                                query_insert = """
-                                    INSERT INTO documentos_cloud (empresa_db, categoria, nombre_archivo, ruta_archivo) 
-                                    VALUES (%s, %s, %s, %s)
-                                """
-                                cursor.execute(query_insert, (str(db_actual), categoria, archivo.name, ruta_completa))
+
+                                # Insertar registro con SQLAlchemy
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text("""
+                                        INSERT INTO documentos_cloud (empresa_db, categoria, nombre_archivo, ruta_archivo)
+                                        VALUES (:empresa_db, :categoria, :nombre_archivo, :ruta_archivo)
+                                    """),
+                                        {
+                                            "empresa_db": str(db_actual),
+                                            "categoria": categoria,
+                                            "nombre_archivo": archivo.name,
+                                            "ruta_archivo": ruta_completa,
+                                        },
+                                    )
                                 archivos_guardados += 1
-                            
-                            conn_doc.commit()
-                            st.success(f"✅ ¡{archivos_guardados} archivo(s) guardado(s) correctamente!")
+
+                            st.success(
+                                f"✅ ¡{archivos_guardados} archivo(s) guardado(s) correctamente!"
+                            )
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al guardar los documentos: {e}")
-                        finally:
-                            cursor.close()
-                            conn_doc.close()
-                else:
-                    st.warning("⚠️ Debes seleccionar al menos un archivo antes de guardar.")
+                    else:
+                        st.warning(
+                            "⚠️ Debes seleccionar al menos un archivo antes de guardar."
+                        )
 
-        st.divider()
+            st.divider()
 
-        # --- LISTADO, BÚSQUEDA, DESCARGA Y ELIMINACIÓN ---
-        st.markdown("### 🗂️ Documentos Almacenados")
-        
-        conn_doc = conectar_db(db_actual)
-        if conn_doc:
+            # --- LISTADO, BÚSQUEDA, DESCARGA Y ELIMINACIÓN ---
+            st.markdown("### 🗂️ Documentos Almacenados")
+
             try:
-                query_select = "SELECT id, categoria, nombre_archivo, ruta_archivo, fecha_subida FROM documentos_cloud WHERE empresa_db = %s ORDER BY fecha_subida DESC"
-                df_docs = ejecutar_consulta(query_select, conn_doc, params=(str(db_actual),))
-                
+                # Consulta de documentos usando SQLAlchemy
+                df_docs = pd.read_sql(
+                    text("""
+                        SELECT id, categoria, nombre_archivo, ruta_archivo, fecha_subida 
+                        FROM documentos_cloud 
+                        WHERE empresa_db = :empresa 
+                        ORDER BY fecha_subida DESC
+                    """),
+                    con=engine,
+                    params={"empresa": str(db_actual)},
+                )
+
                 if df_docs is not None and not df_docs.empty:
                     # Buscador rápido
-                    filtro = st.text_input("🔍 Buscar documento por nombre o categoría:", "", key="search_docs_dcf")
+                    filtro = st.text_input(
+                        "🔍 Buscar documento por nombre o categoría:",
+                        "",
+                        key="search_docs_dcf",
+                    )
                     if filtro:
                         df_docs = df_docs[
-                            df_docs['nombre_archivo'].str.contains(filtro, case=False, na=False) |
-                            df_docs['categoria'].str.contains(filtro, case=False, na=False)
+                            df_docs["nombre_archivo"].str.contains(
+                                filtro, case=False, na=False
+                            )
+                            | df_docs["categoria"].str.contains(
+                                filtro, case=False, na=False
+                            )
                         ]
 
                     # Encabezados
-                    h_col1, h_col2, h_col3, h_col4, h_col5 = st.columns([3, 2, 2, 1, 1])
+                    h_col1, h_col2, h_col3, h_col4, h_col5 = st.columns(
+                        [3, 2, 2, 1, 1]
+                    )
                     h_col1.markdown("**Nombre del Archivo**")
                     h_col2.markdown("**Categoría**")
                     h_col3.markdown("**Fecha**")
@@ -622,42 +691,51 @@ def render():
                         cols = st.columns([3, 2, 2, 1, 1])
                         cols[0].write(f"📄 {row['nombre_archivo']}")
                         cols[1].write(f"🏷️ {row['categoria']}")
-                        cols[2].write(str(row['fecha_subida'])[:10])
-                        
+                        cols[2].write(str(row["fecha_subida"])[:10])
+
                         # Botón Descargar
-                        if os.path.exists(row['ruta_archivo']):
-                            with open(row['ruta_archivo'], "rb") as file_to_download:
+                        if os.path.exists(row["ruta_archivo"]):
+                            with open(
+                                row["ruta_archivo"], "rb"
+                            ) as file_to_download:
                                 cols[3].download_button(
                                     label="⬇️",
                                     data=file_to_download,
-                                    file_name=row['nombre_archivo'],
+                                    file_name=row["nombre_archivo"],
                                     mime="application/octet-stream",
-                                    key=f"down_{row['id']}_dcf"
+                                    key=f"down_{row['id']}_dcf",
                                 )
                         else:
                             cols[3].caption("⚠️ No hallado")
-                            
+
                         # Botón Eliminar
                         if cols[4].button("🗑️", key=f"del_{row['id']}_dcf"):
                             try:
-                                if os.path.exists(row['ruta_archivo']):
-                                    os.remove(row['ruta_archivo'])
-                                
-                                cursor_del = conn_doc.cursor()
-                                cursor_del.execute("DELETE FROM documentos_cloud WHERE id = %s", (row['id'],))
-                                conn_doc.commit()
-                                cursor_del.close()
-                                
-                                st.success(f"🗑️ Documento '{row['nombre_archivo']}' eliminado.")
+                                # 1. Eliminar del disco si existe
+                                if os.path.exists(row["ruta_archivo"]):
+                                    os.remove(row["ruta_archivo"])
+
+                                # 2. Eliminar registro en base de datos
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text(
+                                            "DELETE FROM documentos_cloud WHERE id = :id"
+                                        ),
+                                        {"id": row["id"]},
+                                    )
+
+                                st.success(
+                                    f"🗑️ Documento '{row['nombre_archivo']}' eliminado."
+                                )
                                 st.rerun()
                             except Exception as ex_del:
                                 st.error(f"❌ Error al eliminar: {ex_del}")
                 else:
-                    st.info("ℹ️ No hay documentos subidos para esta empresa todavía.")
+                    st.info(
+                        "ℹ️ No hay documentos subidos para esta empresa todavía."
+                    )
             except Exception as e:
                 st.error(f"Error al cargar la lista de documentos: {e}")
-            finally:
-                conn_doc.close()
 
 
 
