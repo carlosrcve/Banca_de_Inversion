@@ -221,42 +221,60 @@ def render():
             try:
                 engine = get_sqlalchemy_engine()
 
-                # 1. Consultar Inputs exactamente como los definiste en tu CREATE TABLE
+                # Obtener variables por defecto desde session_state o constantes predeterminadas
+                def_company = st.session_state.get("company_name", company_name if 'company_name' in locals() else "Empresa Demo")
+                def_scenario = st.session_state.get("scenario_name", scenario_name if 'scenario_name' in locals() else "Base")
+
+                # 1. Consultar Inputs desde MySQL
                 query_inputs = """
                     SELECT Parametro, Valor 
                     FROM excel_inputs_raw 
                     WHERE company_name = %s AND scenario_name = %s
                     ORDER BY id ASC
                 """
-                df_db_inputs = pd.read_sql(query_inputs, con=engine, params=(company_name, scenario_name))
+                df_db_inputs = pd.read_sql(query_inputs, con=engine, params=(def_company, def_scenario))
 
-                # 2. Consultar Proyecciones
+                # 2. Consultar Proyecciones desde MySQL
                 query_projs = """
                     SELECT year, growth_rate, ebit_margin 
                     FROM excel_projections_raw 
                     WHERE company_name = %s AND scenario_name = %s
                     ORDER BY year ASC
                 """
-                df_db_projs = pd.read_sql(query_projs, con=engine, params=(company_name, scenario_name))
+                df_db_projs = pd.read_sql(query_projs, con=engine, params=(def_company, def_scenario))
 
                 if not df_db_inputs.empty and not df_db_projs.empty:
-                    # Diccionario de Inputs
+                    # Función auxiliar para convertir a float seguro sin lanzar NoneType Exception
+                    def safe_float(val, default_val=0.0):
+                        if val is None or pd.isna(val):
+                            return float(default_val)
+                        try:
+                            return float(val)
+                        except (ValueError, TypeError):
+                            return float(default_val)
+
+                    # Diccionario de Inputs limpios
                     inputs_dict = dict(zip(
                         df_db_inputs["Parametro"].astype(str).str.strip().str.lower(), 
                         df_db_inputs["Valor"]
                     ))
 
-                    db_historical_revenue = float(inputs_dict.get("historical_revenue", historical_revenue))
-                    db_tax_rate = float(inputs_dict.get("tax_rate", tax_rate))
-                    db_capex = float(inputs_dict.get("capex_percent", capex_percent))
-                    db_nwc = float(inputs_dict.get("nwc_percent", nwc_percent))
-                    db_da = float(inputs_dict.get("da_percent", da_percent))
-                    db_wacc = float(inputs_dict.get("wacc", wacc))
-                    db_g = float(inputs_dict.get("terminal_growth_rate", terminal_growth_rate))
-                    db_debt = float(inputs_dict.get("net_debt", net_debt))
+                    # Lectura defensiva de los Inputs
+                    db_historical_revenue = safe_float(inputs_dict.get("historical_revenue"), st.session_state.get("historical_revenue", 1000000.0))
+                    db_tax_rate = safe_float(inputs_dict.get("tax_rate"), st.session_state.get("tax_rate", 0.30))
+                    db_capex = safe_float(inputs_dict.get("capex_percent"), st.session_state.get("capex_percent", 0.05))
+                    db_nwc = safe_float(inputs_dict.get("nwc_percent"), st.session_state.get("nwc_percent", 0.10))
+                    db_da = safe_float(inputs_dict.get("da_percent"), st.session_state.get("da_percent", 0.03))
+                    db_wacc = safe_float(inputs_dict.get("wacc"), st.session_state.get("wacc", 0.10))
+                    db_g = safe_float(inputs_dict.get("terminal_growth_rate"), st.session_state.get("terminal_growth_rate", 0.025))
+                    db_debt = safe_float(inputs_dict.get("net_debt"), st.session_state.get("net_debt", 0.0))
 
-                    db_growth_rates = [float(x) for x in df_db_projs["growth_rate"].tolist()]
-                    db_ebit_margins = [float(x) for x in df_db_projs["ebit_margin"].tolist()]
+                    # Lectura defensiva de las Proyecciones (Rellenar NaNs con 0.0)
+                    df_db_projs["growth_rate"] = df_db_projs["growth_rate"].apply(lambda x: safe_float(x, 0.05))
+                    df_db_projs["ebit_margin"] = df_db_projs["ebit_margin"].apply(lambda x: safe_float(x, 0.15))
+
+                    db_growth_rates = df_db_projs["growth_rate"].tolist()
+                    db_ebit_margins = df_db_projs["ebit_margin"].tolist()
 
                     # Ejecutar modelo DCF
                     results_db = DCFController.run_valuation(
@@ -301,7 +319,7 @@ def render():
                     st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
 
                 else:
-                    st.warning(f"⚠️ No hay registros en MySQL para '{company_name}' / '{scenario_name}'.")
+                    st.warning(f"⚠️ No hay registros en MySQL para '{def_company}' / '{def_scenario}'.")
 
             except Exception as db_err:
                 st.error(f"❌ Error al consultar MySQL: {db_err}")
