@@ -1,8 +1,8 @@
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 from portfolio_controller import PortfolioController
-import plotly.graph_objects as go
 
 
 # -------------------------------------------------------------------------
@@ -16,16 +16,14 @@ def load_sp500_tickers():
         tables = pd.read_html(url)
         df_sp500 = tables[0]
 
-        # Crear diccionario { "Símbolo - Nombre": "Ticker" }
         dict_sp500 = {}
         for _, row in df_sp500.iterrows():
-            symbol = str(row["Symbol"]).replace(".", "-")  # Ajustar símbolos estilo BRK.B -> BRK-B
+            symbol = str(row["Symbol"]).replace(".", "-")
             name = row["Security"]
             dict_sp500[f"{symbol} - {name}"] = symbol
 
         return dict_sp500
-    except Exception as e:
-        # Respaldo (Fallback) con las acciones más importantes si no hay internet o falla el scraping
+    except Exception:
         return {
             "AAPL - Apple Inc.": "AAPL",
             "NVDA - NVIDIA Corp.": "NVDA",
@@ -37,16 +35,6 @@ def load_sp500_tickers():
             "BRK-B - Berkshire Hathaway": "BRK-B",
             "JPM - JPMorgan Chase & Co.": "JPM",
             "V - Visa Inc.": "V",
-            "UNH - UnitedHealth Group": "UNH",
-            "XOM - Exxon Mobil Corp.": "XOM",
-            "JNJ - Johnson & Johnson": "JNJ",
-            "PG - Procter & Gamble": "PG",
-            "HD - Home Depot": "HD",
-            "MA - Mastercard Inc.": "MA",
-            "NFLX - Netflix Inc.": "NFLX",
-            "AMD - Advanced Micro Devices": "AMD",
-            "BAC - Bank of America": "BAC",
-            "DIS - Walt Disney Co.": "DIS",
         }
 
 
@@ -68,7 +56,7 @@ def get_ticker_snapshot(symbol: str):
 
 
 # -------------------------------------------------------------------------
-# FRAGMENTOS CON ESTADO AISLADO (Evita que el cambio de una columna afecte a las demás)
+# FRAGMENTOS CON ESTADO AISLADO
 # -------------------------------------------------------------------------
 @st.fragment
 def render_metals_column():
@@ -85,13 +73,8 @@ def render_metals_column():
     )
     metal_ticker = dict_metales[selected_metal_name]
 
-    # Guardar en Session State para congelar estado individual
     state_key = f"data_{metal_ticker}"
-    if state_key not in st.session_state:
-        st.session_state[state_key] = get_ticker_snapshot(metal_ticker)
-    
-    # Si cambió el selector, actualizamos solo este estado
-    if st.session_state.get("last_metal") != metal_ticker:
+    if state_key not in st.session_state or st.session_state.get("last_metal") != metal_ticker:
         st.session_state[state_key] = get_ticker_snapshot(metal_ticker)
         st.session_state["last_metal"] = metal_ticker
 
@@ -123,10 +106,7 @@ def render_indices_column():
     index_ticker = dict_indices[selected_index_name]
 
     state_key = f"data_{index_ticker}"
-    if state_key not in st.session_state:
-        st.session_state[state_key] = get_ticker_snapshot(index_ticker)
-
-    if st.session_state.get("last_index") != index_ticker:
+    if state_key not in st.session_state or st.session_state.get("last_index") != index_ticker:
         st.session_state[state_key] = get_ticker_snapshot(index_ticker)
         st.session_state["last_index"] = index_ticker
 
@@ -155,10 +135,7 @@ def render_stocks_column():
     stock_ticker = dict_acciones[selected_stock_label]
 
     state_key = f"data_{stock_ticker}"
-    if state_key not in st.session_state:
-        st.session_state[state_key] = get_ticker_snapshot(stock_ticker)
-
-    if st.session_state.get("last_stock") != stock_ticker:
+    if state_key not in st.session_state or st.session_state.get("last_stock") != stock_ticker:
         st.session_state[state_key] = get_ticker_snapshot(stock_ticker)
         st.session_state["last_stock"] = stock_ticker
 
@@ -284,12 +261,14 @@ def render():
         symbol = st.text_input(
             "Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, NVDA, TSLA, GC=F, ^IXIC, BTC-USD):",
             value="NVDA",
+            key="input_search_symbol",
         ).strip().upper()
     with col_search2:
         period = st.selectbox(
             "Rango de Tiempo",
             ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
             index=3,
+            key="select_search_period",
         )
 
     if symbol:
@@ -302,11 +281,14 @@ def render():
 
                 st.write(f"### Evolución del Precio (Velas Japonesas): **{symbol}**")
 
+                # Asegurar compatibilidad de fechas en el eje X
+                df_hist = df_hist.reset_index()
+
                 # GRÁFICO DE VELAS CON PLOTLY
                 fig = go.Figure(
                     data=[
                         go.Candlestick(
-                            x=df_hist.index,
+                            x=df_hist["Date"],
                             open=df_hist["Open"],
                             high=df_hist["High"],
                             low=df_hist["Low"],
@@ -325,15 +307,14 @@ def render():
                     height=450,
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+                # Forzar renderizado explícito con clave única
+                st.plotly_chart(fig, use_container_width=True, key=f"candlestick_chart_{symbol}_{period}")
 
                 col_sub1, col_sub2 = st.columns([3, 1])
                 with col_sub1:
                     st.subheader("📊 Resumen de Datos Históricos")
                     st.dataframe(
-                        df_hist[
-                            ["Open", "High", "Low", "Close", "Volume"]
-                        ].tail(10),
+                        df_hist[["Date", "Open", "High", "Low", "Close", "Volume"]].tail(10),
                         use_container_width=True,
                     )
 
@@ -347,6 +328,7 @@ def render():
                     asset_type_input = st.selectbox(
                         "Tipo de Activo",
                         ["Equity", "Commodity", "Index", "Crypto", "FX"],
+                        key="select_asset_type_save",
                     )
                     if st.button(f"💾 Guardar {symbol} en TiDB", key="save_search_asset"):
                         if PortfolioController.save_market_quote(
