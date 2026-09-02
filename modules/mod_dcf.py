@@ -174,12 +174,6 @@ def render():
                     st.error(f"❌ Error al guardar en MySQL: {err}")
 
     # -------------------------------------------------------------------------
-    # CONTROLES SIDEBAR (FILTROS DE CONSULTA A MYSQL)
-    # -------------------------------------------------------------------------
-    st.sidebar.header("🔍 Consultar Escenario desde MySQL")
-    company_name = st.sidebar.text_input("Empresa (MySQL)", value=st.session_state.get("company_name", default_company))
-    scenario_name = st.sidebar.text_input("Escenario (MySQL)", value=st.session_state.get("scenario_name", default_scenario))
-    # -------------------------------------------------------------------------
     # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PARSER ROBUSTO)
     # -------------------------------------------------------------------------
     with tab2:
@@ -270,13 +264,30 @@ def render():
                         net_debt=db_debt
                     )
 
+                    # --- MÉTRICAS DE VALORACIÓN ---
                     col_res1, col_res2, col_res3 = st.columns(3)
                     col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
                     col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
                     col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
 
+                    # --- BLOQUE DE ANÁLISIS FINANCIERO Y ESTRUCTURA DE VALOR ---
+                    pv_tv = results_db.pv_terminal_value
+                    ev = results_db.enterprise_value
+                    tv_weight = (pv_tv / ev * 100) if ev > 0 else 0
+                    pv_fcf_sum = sum(results_db.pv_cash_flows)
+                    fcf_weight = 100 - tv_weight
+
+                    st.info(f"""
+                    💡 **Análisis de Valoración y Estructura Financiera:**
+                    
+                    * **Concentración del Valor:** El **{tv_weight:.2f}%** del Enterprise Value (${ev:,.2f}) proviene del **Valor Terminal Descontado** (${pv_tv:,.2f}), mientras que los Flujos de Caja Libres explícitos proyectados representan el **{fcf_weight:.2f}%** restante (${pv_fcf_sum:,.2f}).
+                    * **Sensibilidad del Modelo:** Al depender fuertemente de la perpetuidad, la valoración es altamente sensible a variaciones en la tasa de descuento (**WACC: {db_wacc:.2%}**) y el crecimiento perpetuo (**g: {db_g:.2%}**).
+                    * **Estructura de Capital:** La coincidencia exacta o cercana entre el Enterprise Value y el Equity Value (${results_db.equity_value:,.2f}) indica una postura de **Deuda Neta neutral/baja** (${db_debt:,.2f}), trasladando la totalidad del valor operativo al patrimonio de los accionistas.
+                    """)
+
                     st.markdown("---")
 
+                    # --- TABLA COMPLETA DE PROYECCIONES ---
                     df_projections = pd.DataFrame({
                         "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
                         "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
@@ -289,9 +300,13 @@ def render():
                     })
 
                     st.dataframe(df_projections.style.format({
-                        "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
-                        "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
-                        "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
+                        "Tasa Crec. (%)": "{:.2f}%", 
+                        "Margen EBIT (%)": "{:.2f}%",
+                        "Ingresos Proyectados ($)": "${:,.2f}", 
+                        "EBIT ($)": "${:,.2f}",
+                        "NOPAT ($)": "${:,.2f}", 
+                        "Flujo Caja Libre (FCF) ($)": "${:,.2f}", 
+                        "PV FCF ($)": "${:,.2f}"
                     }), use_container_width=True)
 
                     st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
