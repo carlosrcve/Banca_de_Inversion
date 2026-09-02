@@ -16,6 +16,24 @@ def get_ticker_snapshot(symbol: str):
     except Exception:
         return 0.0, 0.0
 
+import pandas as pd
+import streamlit as st
+import yfinance as yf
+from portfolio_controller import PortfolioController
+
+
+def get_ticker_snapshot(symbol: str):
+    """Obtiene de forma segura el precio actual y variación del ticker."""
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.fast_info
+        price = info.get("lastPrice", 0.0) or 0.0
+        prev = info.get("previousClose", price) or price
+        change_pct = ((price - prev) / prev * 100) if prev else 0.0
+        return price, change_pct
+    except Exception:
+        return 0.0, 0.0
+
 
 def render():
     st.title("📈 Análisis de Mercados & Clases de Activos Globales")
@@ -30,75 +48,87 @@ def render():
     # 1. CATEGORÍA COMMODITIES / METALES
     # -------------------------------------------------------------------------
     with col_m1:
-    st.subheader("🪙 Metales y Commodities")
-    dict_metales = {
-        "Oro (Gold Spot)": "GC=F",
-        "Plata (Silver)": "SI=F",
-        "Cobre (Copper)": "HG=F",
-        "Platino (Platinum)": "PL=F",
-        "Petróleo WTI": "CL=F"
-    }
-    selected_metal_name = st.selectbox("Seleccione el Metal:", list(dict_metales.keys()), key="sel_metal")
-    metal_ticker = dict_metales[selected_metal_name]
+        st.subheader("🪙 Metales y Commodities")
+        dict_metales = {
+            "Oro (Gold Spot)": "GC=F",
+            "Plata (Silver)": "SI=F",
+            "Cobre (Copper)": "HG=F",
+            "Platino (Platinum)": "PL=F",
+            "Petróleo WTI": "CL=F",
+        }
+        selected_metal_name = st.selectbox(
+            "Seleccione el Metal:", list(dict_metales.keys()), key="sel_metal"
+        )
+        metal_ticker = dict_metales[selected_metal_name]
 
-    m_price, m_chg = get_ticker_snapshot(metal_ticker)
-    st.metric(selected_metal_name, f"${m_price:,.2f}", f"{m_chg:+.2f}%")
+        m_price, m_chg = get_ticker_snapshot(metal_ticker)
+        st.metric(selected_metal_name, f"${m_price:,.2f}", f"{m_chg:+.2f}%")
 
-    if st.button(f"💾 Guardar {selected_metal_name}", key="save_metal_btn"):
-        if PortfolioController.save_market_quote(metal_ticker, selected_metal_name, "Commodity", m_price, m_chg):
-            st.success(f"✅ {selected_metal_name} guardado en TiDB.")
-        else:
-            st.error("❌ Error al guardar en TiDB.")
+        if st.button(f"💾 Guardar {selected_metal_name}", key="save_metal_btn"):
+            if PortfolioController.save_market_quote(
+                metal_ticker, selected_metal_name, "Commodity", m_price, m_chg
+            ):
+                st.success(f"✅ {selected_metal_name} guardado en TiDB.")
+            else:
+                st.error("❌ Error al guardar en TiDB.")
 
     # -------------------------------------------------------------------------
     # 2. CATEGORÍA ÍNDICES GLOBALES / MERCADOS
     # -------------------------------------------------------------------------
     with col_m2:
-    st.subheader("📊 Índices Bursátiles")
-    dict_indices = {
-        "Nasdaq Composite": "^IXIC",
-        "S&P 500": "^GSPC",
-        "Dow Jones Industrial": "^DJI",
-        "Russell 2000": "^RUT",
-        "FTSE 100 (UK)": "^FTSE"
-    }
-    selected_index_name = st.selectbox("Seleccione el Índice:", list(dict_indices.keys()), key="sel_index")
-    index_ticker = dict_indices[selected_index_name]
+        st.subheader("📊 Índices Bursátiles")
+        dict_indices = {
+            "Nasdaq Composite": "^IXIC",
+            "S&P 500": "^GSPC",
+            "Dow Jones Industrial": "^DJI",
+            "Russell 2000": "^RUT",
+            "FTSE 100 (UK)": "^FTSE",
+        }
+        selected_index_name = st.selectbox(
+            "Seleccione el Índice:", list(dict_indices.keys()), key="sel_index"
+        )
+        index_ticker = dict_indices[selected_index_name]
 
-    i_price, i_chg = get_ticker_snapshot(index_ticker)
-    st.metric(selected_index_name, f"{i_price:,.2f} pts", f"{i_chg:+.2f}%")
+        i_price, i_chg = get_ticker_snapshot(index_ticker)
+        st.metric(selected_index_name, f"{i_price:,.2f} pts", f"{i_chg:+.2f}%")
 
-    if st.button(f"💾 Guardar {selected_index_name}", key="save_index_btn"):
-        if PortfolioController.save_market_quote(index_ticker, selected_index_name, "Index", i_price, i_chg):
-            st.success(f"✅ {selected_index_name} guardado en TiDB.")
-        else:
-            st.error("❌ Error al guardar en TiDB.")
+        if st.button(f"💾 Guardar {selected_index_name}", key="save_index_btn"):
+            if PortfolioController.save_market_quote(
+                index_ticker, selected_index_name, "Index", i_price, i_chg
+            ):
+                st.success(f"✅ {selected_index_name} guardado en TiDB.")
+            else:
+                st.error("❌ Error al guardar en TiDB.")
 
     # -------------------------------------------------------------------------
     # 3. CATEGORÍA ACCIONES DE WALL STREET
     # -------------------------------------------------------------------------
     with col_m3:
-    st.subheader("🏢 Acciones Wall Street")
-    dict_acciones = {
-        "Apple Inc. (AAPL)": "AAPL",
-        "NVIDIA Corp. (NVDA)": "NVDA",
-        "Microsoft Corp. (MSFT)": "MSFT",
-        "Tesla Inc. (TSLA)": "TSLA",
-        "Amazon.com (AMZN)": "AMZN",
-        "Alphabet / Google (GOOGL)": "GOOGL",
-        "Meta Platforms (META)": "META"
-    }
-    selected_stock_name = st.selectbox("Seleccione la Acción:", list(dict_acciones.keys()), key="sel_stock")
-    stock_ticker = dict_acciones[selected_stock_name]
+        st.subheader("🏢 Acciones Wall Street")
+        dict_acciones = {
+            "Apple Inc. (AAPL)": "AAPL",
+            "NVIDIA Corp. (NVDA)": "NVDA",
+            "Microsoft Corp. (MSFT)": "MSFT",
+            "Tesla Inc. (TSLA)": "TSLA",
+            "Amazon.com (AMZN)": "AMZN",
+            "Alphabet / Google (GOOGL)": "GOOGL",
+            "Meta Platforms (META)": "META",
+        }
+        selected_stock_name = st.selectbox(
+            "Seleccione la Acción:", list(dict_acciones.keys()), key="sel_stock"
+        )
+        stock_ticker = dict_acciones[selected_stock_name]
 
-    s_price, s_chg = get_ticker_snapshot(stock_ticker)
-    st.metric(selected_stock_name, f"${s_price:,.2f}", f"{s_chg:+.2f}%")
+        s_price, s_chg = get_ticker_snapshot(stock_ticker)
+        st.metric(selected_stock_name, f"${s_price:,.2f}", f"{s_chg:+.2f}%")
 
-    if st.button(f"💾 Guardar {stock_ticker}", key="save_stock_btn"):
-        if PortfolioController.save_market_quote(stock_ticker, selected_stock_name, "Equity", s_price, s_chg):
-            st.success(f"✅ {selected_stock_name} guardado en TiDB.")
-        else:
-            st.error("❌ Error al guardar en TiDB.")
+        if st.button(f"💾 Guardar {stock_ticker}", key="save_stock_btn"):
+            if PortfolioController.save_market_quote(
+                stock_ticker, selected_stock_name, "Equity", s_price, s_chg
+            ):
+                st.success(f"✅ {selected_stock_name} guardado en TiDB.")
+            else:
+                st.error("❌ Error al guardar en TiDB.")
 
     st.markdown("---")
 
