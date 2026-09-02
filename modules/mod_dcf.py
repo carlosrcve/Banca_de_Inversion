@@ -513,7 +513,7 @@ def render():
         nom_flows = st.session_state.get("active_nom_cash_flows", None)
 
         if pv_flows:
-            # Crear DataFrame con índice numérico o string con formato ordenable
+            # Crear DataFrame con índice numérico y string ordenable
             df_chart = pd.DataFrame(
                 {
                     "Año Num": [i + 1 for i in range(len(pv_flows))],
@@ -522,23 +522,21 @@ def render():
                 }
             )
 
-            # Si existen flujos nominales en session_state, los agregamos para comparar
-            if nom_flows and len(nom_flows) == len(pv_flows):
+            has_nominal = nom_flows and len(nom_flows) == len(pv_flows)
+            if has_nominal:
                 df_chart["FCF Nominal ($)"] = [float(val) for val in nom_flows]
 
-            # Ordenar explícitamente por el número de año
+            # Ordenar explícitamente por número de año
             df_chart = df_chart.sort_values("Año Num")
 
-            # Métrica rápida
+            # --- MÉTRICAS ---
             col_g1, col_g2 = st.columns(2)
-            col_g1.metric(
-                "Total PV FCF", f"${sum(df_chart['PV FCF ($)']):,.2f}"
-            )
+            col_g1.metric("Total PV FCF", f"${sum(df_chart['PV FCF ($)']):,.2f}")
             col_g2.metric("Años Proyectados", f"{len(df_chart)} Años")
 
             st.subheader("Evolución del Valor Presente de los Flujos (PV FCF)")
 
-            # Mostrar gráfico ordenado usando el Año formateado o número
+            # Renderizar Gráfico
             df_plot = df_chart.set_index("Año")[
                 [
                     col
@@ -548,12 +546,69 @@ def render():
             ]
             st.bar_chart(df_plot)
 
+            # --- CÁLCULO DE TENDENCIA DINÁMICA ---
+            pv_inicial = df_chart["PV FCF ($)"].iloc[0]
+            pv_final = df_chart["PV FCF ($)"].iloc[-1]
+            diff_pct = (
+                ((pv_final - pv_inicial) / abs(pv_inicial)) * 100
+                if pv_inicial != 0
+                else 0
+            )
+
+            # Determinar el mensaje de interpretación según la tendencia
+            if diff_pct < -5:
+                comportamiento = (
+                    f"<b>Tendencia Decreciente:</b> El valor presente de los flujos disminuye un <b>{abs(diff_pct):.1f}%</b> "
+                    f"desde el {df_chart['Año'].iloc[0]} (${pv_inicial:,.2f}) hasta el {df_chart['Año'].iloc[-1]} (${pv_final:,.2f}). "
+                    f"Este comportamiento es típico en modelos DCF donde la tasa de descuento (WACC) erosiona el valor del dinero en el tiempo "
+                    f"a un ritmo mayor del que crecen los flujos nominales operativos."
+                )
+            elif diff_pct > 5:
+                comportamiento = (
+                    f"<b>Tendencia Creciente:</b> El valor presente exhibe un crecimiento acumulado del <b>{diff_pct:.1f}%</b> "
+                    f"a lo largo del período explicitado. Esto indica que la tasa de expansión del negocio en sus flujos operativos es "
+                    f"lo suficientemente alta como para superar el efecto erosivo del descuento por tasa (WACC)."
+                )
+            else:
+                comportamiento = (
+                    f"<b>Comportamiento Plano/Estable:</b> Los flujos a valor presente se mantienen estables con una variación de solo el "
+                    f"<b>{diff_pct:.1f}%</b> entre el primer y último año. Significa que el crecimiento operativo de la caja compensa casi "
+                    f"de manera exacta la tasa de descuento aplicada en cada período."
+                )
+
+            # Agregar detalle de descuento si existen flujos nominales
+            leyenda_comparativa = ""
+            if has_nominal:
+                nom_total = sum(df_chart["FCF Nominal ($)"])
+                pv_total = sum(df_chart["PV FCF ($)"])
+                descuento_total = nom_total - pv_total
+                leyenda_comparativa = (
+                    f"<li style='margin-top: 6px;'><b>Impacto de la Tasa de Descuento:</b> La suma de flujos nominales proyectados es de "
+                    f"<b>${nom_total:,.2f}</b>, mientras que su valor presente se reduce a <b>${pv_total:,.2f}</b>, absorbiendo un impacto "
+                    f"por riesgo/tiempo equivalente a <b>${descuento_total:,.2f}</b>.</li>"
+                )
+
+            # HTML Dinámico de Interpretación del Gráfico
+            html_grafico_interpretation = (
+                f'<div style="background-color: #e8f4f8; border-left: 5px solid #29b6f6; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-top: 20px; margin-bottom: 20px;">'
+                f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">📊 Interpretación Dinámica del Perfil de Flujos:</div>'
+                f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
+                f'<li style="margin-bottom: 8px;">{comportamiento}</li>'
+                f"{leyenda_comparativa}"
+                f'</ul>'
+                f"</div>"
+            )
+
+            st.markdown(html_grafico_interpretation, unsafe_allow_html=True)
+
             with st.expander("🔍 Ver Tabla de Datos del Gráfico"):
                 st.dataframe(
                     df_chart.style.format(
                         {
                             "PV FCF ($)": "${:,.2f}",
-                            "FCF Nominal ($)": "${:,.2f}",
+                            "FCF Nominal ($)": (
+                                "${:,.2f}" if has_nominal else None
+                            ),
                         }
                     ),
                     use_container_width=True,
