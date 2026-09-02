@@ -141,28 +141,49 @@ def render():
                     # CASO 2: ARCHIVO DIRECTO DE `dcf_projections.xlsx`
                     # =========================================================================
                     elif "year_index" in df_first_sheet.columns and ("valuation_id" in df_first_sheet.columns or "analysis_id" in df_first_sheet.columns):
-                        st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura directa de **dcf_projections** ({len(df_first_sheet)} registros).")
+                        st.info(f"📄 Archivo **{uploaded_file.name}** detectado para la tabla **dcf_projections** ({len(df_first_sheet)} filas).")
                         
-                        # 1. Mapeo clave: MySQL exige 'analysis_id' (igual que en el Caso 3)
+                        # 1. Normalizar el nombre de la columna a 'analysis_id'
                         if "valuation_id" in df_first_sheet.columns:
                             df_first_sheet = df_first_sheet.rename(columns={"valuation_id": "analysis_id"})
 
-                        # 2. Inserción directa
-                        if st.button(f"🚀 Guardar {uploaded_file.name} en `dcf_projections`", key=f"btn_direct_{uploaded_file.name}"):
-                            try:
-                                # Eliminar columnas autogeneradas por MySQL si vienen en el Excel
-                                df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
-                                
-                                # Guardar directamente en la tabla dcf_projections
-                                df_to_insert.to_sql(
-                                    name="dcf_projections", 
-                                    con=engine, 
-                                    if_exists="append", 
-                                    index=False
-                                )
-                                st.success(f"✅ ¡Se insertaron {len(df_to_insert)} registros exitosamente en `dcf_projections`!")
-                            except Exception as e:
-                                st.error(f"❌ Error al guardar en MySQL: {e}")
+                        # 2. Consultar los IDs existentes en dcf_analyses (ordenados del más reciente al más antiguo)
+                        try:
+                            df_parents = pd.read_sql("SELECT analysis_id, scenario_name FROM dcf_analyses ORDER BY analysis_id DESC", con=engine)
+                        except Exception as e:
+                            df_parents = pd.DataFrame()
+
+                        if df_parents.empty:
+                            st.error("❌ No hay registros en `dcf_analyses`. Debes subir primero la tabla padre.")
+                        else:
+                            # Preselecciona automáticamente el ÚLTIMO ID creado en la primera tabla
+                            latest_id = int(df_parents.iloc[0]["analysis_id"])
+
+                            target_analysis_id = st.selectbox(
+                                "📌 Vincular estas proyecciones al Análisis ID:",
+                                options=df_parents["analysis_id"].tolist(),
+                                index=0,  # Toma automáticamente el primero de la lista (el más reciente)
+                                format_func=lambda x: f"ID #{x} - Escenario: {df_parents[df_parents['analysis_id']==x]['scenario_name'].values[0]}"
+                            )
+
+                            # Sobrescribir el '1' del Excel con el ID real registrado en MySQL
+                            df_first_sheet["analysis_id"] = target_analysis_id
+
+                            # 3. Inserción directa en MySQL
+                            if st.button(f"🚀 Guardar {uploaded_file.name} en `dcf_projections`", key=f"btn_direct_{uploaded_file.name}"):
+                                try:
+                                    # Omitir columnas autogeneradas (PK y timestamp)
+                                    df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
+                                    
+                                    df_to_insert.to_sql(
+                                        name="dcf_projections", 
+                                        con=engine, 
+                                        if_exists="append", 
+                                        index=False
+                                    )
+                                    st.success(f"✅ ¡Guardado exitoso! Se insertaron los {len(df_to_insert)} registros en `dcf_projections` vinculados al `analysis_id = {target_analysis_id}`.")
+                                except Exception as e:
+                                    st.error(f"❌ Error al guardar en MySQL: {e}")
 
                     # =========================================================================
                     # CASO 3: ARCHIVO MODELO INTERNO (HOJAS "Inputs" Y "Projections")
