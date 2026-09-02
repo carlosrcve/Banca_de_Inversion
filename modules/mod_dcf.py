@@ -507,17 +507,61 @@ def render():
     # PESTAÑA 3: GRÁFICOS
     # -------------------------------------------------------------------------
     with tab3:
-        st.header("📈 Análisis Gráfico")
-        pv_flows = st.session_state.get("active_pv_cash_flows", None)
-        if pv_flows:
-            df_chart = pd.DataFrame({
-                "Año": [f"Año {i+1}" for i in range(len(pv_flows))],
-                "PV FCF ($)": [float(val) for val in pv_flows],
-            }).set_index("Año")
+        st.header("📈 Análisis Gráfico de Flujos")
 
-            st.bar_chart(df_chart)
+        pv_flows = st.session_state.get("active_pv_cash_flows", None)
+        nom_flows = st.session_state.get("active_nom_cash_flows", None)
+
+        if pv_flows:
+            # Crear DataFrame con índice numérico o string con formato ordenable
+            df_chart = pd.DataFrame(
+                {
+                    "Año Num": [i + 1 for i in range(len(pv_flows))],
+                    "Año": [f"Año {i+1:02d}" for i in range(len(pv_flows))],
+                    "PV FCF ($)": [float(val) for val in pv_flows],
+                }
+            )
+
+            # Si existen flujos nominales en session_state, los agregamos para comparar
+            if nom_flows and len(nom_flows) == len(pv_flows):
+                df_chart["FCF Nominal ($)"] = [float(val) for val in nom_flows]
+
+            # Ordenar explícitamente por el número de año
+            df_chart = df_chart.sort_values("Año Num")
+
+            # Métrica rápida
+            col_g1, col_g2 = st.columns(2)
+            col_g1.metric(
+                "Total PV FCF", f"${sum(df_chart['PV FCF ($)']):,.2f}"
+            )
+            col_g2.metric("Años Proyectados", f"{len(df_chart)} Años")
+
+            st.subheader("Evolución del Valor Presente de los Flujos (PV FCF)")
+
+            # Mostrar gráfico ordenado usando el Año formateado o número
+            df_plot = df_chart.set_index("Año")[
+                [
+                    col
+                    for col in ["PV FCF ($)", "FCF Nominal ($)"]
+                    if col in df_chart.columns
+                ]
+            ]
+            st.bar_chart(df_plot)
+
+            with st.expander("🔍 Ver Tabla de Datos del Gráfico"):
+                st.dataframe(
+                    df_chart.style.format(
+                        {
+                            "PV FCF ($)": "${:,.2f}",
+                            "FCF Nominal ($)": "${:,.2f}",
+                        }
+                    ),
+                    use_container_width=True,
+                )
         else:
-            st.info("Consulta un escenario válido en MySQL para visualizar el gráfico.")
+            st.info(
+                "Consulta un escenario válido en MySQL para visualizar el gráfico."
+            )
 
     # -------------------------------------------------------------------------
     # PESTAÑA 4: GESTOR DOCUMENTAL EN LA NUBE
