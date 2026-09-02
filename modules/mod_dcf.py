@@ -183,6 +183,9 @@ def render():
     # -------------------------------------------------------------------------
     # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL)
     # -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PROTECCIÓN DIVISION BY ZERO)
+    # -------------------------------------------------------------------------
     with tab2:
         st.header("📊 Resultados de Valoración (Exclusivo desde MySQL)")
 
@@ -218,55 +221,69 @@ def render():
                 db_capex = safe_float(inputs_dict.get("capex_percent"))
                 db_nwc = safe_float(inputs_dict.get("nwc_percent"))
                 db_da = safe_float(inputs_dict.get("da_percent"))
-                db_wacc = safe_float(inputs_dict.get("wacc"))
-                db_g = safe_float(inputs_dict.get("terminal_growth_rate"))
+                
+                # Cargar tasas financieras
+                db_wacc = safe_float(inputs_dict.get("wacc"), default_val=0.10) # 10% por defecto si no existe
+                db_g = safe_float(inputs_dict.get("terminal_growth_rate"), default_val=0.02) # 2% por defecto
                 db_debt = safe_float(inputs_dict.get("net_debt"))
 
-                df_db_projs["growth_rate"] = df_db_projs["growth_rate"].apply(lambda x: safe_float(x, 0.0))
-                df_db_projs["ebit_margin"] = df_db_projs["ebit_margin"].apply(lambda x: safe_float(x, 0.0))
+                # -------------------------------------------------------------
+                # VALIDACIÓN CRÍTICA CONTRA DIVISION BY ZERO
+                # -------------------------------------------------------------
+                if db_wacc <= db_g:
+                    st.error(
+                        f"🚨 **Error de consistencia financiera en MySQL:**\n\n"
+                        f"- **WACC:** `{db_wacc:.2%}`\n"
+                        f"- **Crecimiento Terminal (g):** `{db_g:.2%}`\n\n"
+                        f"El WACC debe ser estrictamente mayor que la tasa de crecimiento terminal ($\text{{WACC}} > g$). "
+                        f"Si son iguales, el denominador $(\text{{WACC}} - g)$ resulta en cero o en un valor negativo inválido."
+                    )
+                else:
+                    df_db_projs["growth_rate"] = df_db_projs["growth_rate"].apply(lambda x: safe_float(x, 0.0))
+                    df_db_projs["ebit_margin"] = df_db_projs["ebit_margin"].apply(lambda x: safe_float(x, 0.0))
 
-                db_growth_rates = df_db_projs["growth_rate"].tolist()
-                db_ebit_margins = df_db_projs["ebit_margin"].tolist()
+                    db_growth_rates = df_db_projs["growth_rate"].tolist()
+                    db_ebit_margins = df_db_projs["ebit_margin"].tolist()
 
-                # Ejecución de la valoración usando solo la data de MySQL
-                results_db = DCFController.run_valuation(
-                    historical_revenue=db_historical_revenue,
-                    growth_rates=db_growth_rates,
-                    ebit_margins=db_ebit_margins,
-                    tax_rate=db_tax_rate,
-                    capex_percent=db_capex,
-                    nwc_percent=db_nwc,
-                    da_percent=db_da,
-                    wacc=db_wacc,
-                    terminal_growth_rate=db_g,
-                    net_debt=db_debt
-                )
+                    # Ejecución segura de la valoración
+                    results_db = DCFController.run_valuation(
+                        historical_revenue=db_historical_revenue,
+                        growth_rates=db_growth_rates,
+                        ebit_margins=db_ebit_margins,
+                        tax_rate=db_tax_rate,
+                        capex_percent=db_capex,
+                        nwc_percent=db_nwc,
+                        da_percent=db_da,
+                        wacc=db_wacc,
+                        terminal_growth_rate=db_g,
+                        net_debt=db_debt
+                    )
 
-                col_res1, col_res2, col_res3 = st.columns(3)
-                col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
-                col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
-                col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
+                    col_res1, col_res2, col_res3 = st.columns(3)
+                    col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
+                    col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
+                    col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
 
-                st.markdown("---")
+                    st.markdown("---")
 
-                df_projections = pd.DataFrame({
-                    "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
-                    "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
-                    "Margen EBIT (%)": [m * 100 for m in db_ebit_margins],
-                    "Ingresos Proyectados ($)": results_db.projected_revenues,
-                    "EBIT ($)": results_db.projected_ebit,
-                    "NOPAT ($)": results_db.projected_nopat,
-                    "Flujo Caja Libre (FCF) ($)": results_db.free_cash_flows,
-                    "PV FCF ($)": results_db.pv_cash_flows,
-                })
+                    df_projections = pd.DataFrame({
+                        "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
+                        "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
+                        "Margen EBIT (%)": [m * 100 for m in db_ebit_margins],
+                        "Ingresos Proyectados ($)": results_db.projected_revenues,
+                        "EBIT ($)": results_db.projected_ebit,
+                        "NOPAT ($)": results_db.projected_nopat,
+                        "Flujo Caja Libre (FCF) ($)": results_db.free_cash_flows,
+                        "PV FCF ($)": results_db.pv_cash_flows,
+                    })
 
-                st.dataframe(df_projections.style.format({
-                    "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
-                    "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
-                    "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
-                }), use_container_width=True)
+                    st.dataframe(df_projections.style.format({
+                        "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
+                        "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
+                        "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
+                    }), use_container_width=True)
 
-                st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
+                    st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
 
             else:
                 st.warning(f"⚠️ No se encontraron registros guardados en MySQL para la empresa '{company_name}' y el escenario '{scenario_name}'. Carga el archivo en la Pestaña 1 e insértalo a la BD.")
