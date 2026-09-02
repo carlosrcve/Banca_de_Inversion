@@ -106,7 +106,6 @@ def render():
     with tab1:
         st.header("📥 Cargar Modelo DCF a MySQL")
 
-        # Permite subir archivos de modelo (múltiples o individuales)
         uploaded_files = st.file_uploader(
             "Subir archivos Excel (.xlsx / .xls)", 
             type=["xlsx", "xls"], 
@@ -122,8 +121,6 @@ def render():
                     excel_file = pd.ExcelFile(uploaded_file)
                     sheet_names = excel_file.sheet_names
                     df_first_sheet = pd.read_excel(excel_file, sheet_name=0)
-                    
-                    # Limpieza de nombres de columnas (elimina espacios extra)
                     df_first_sheet.columns = df_first_sheet.columns.astype(str).str.strip()
 
                     # =========================================================================
@@ -134,7 +131,6 @@ def render():
                         
                         if st.button(f"🚀 Insertar {uploaded_file.name} en `dcf_analyses`", key=f"btn_an_{uploaded_file.name}"):
                             try:
-                                # Ignorar clave primaria autoincremental si viene en el Excel
                                 df_to_insert = df_first_sheet.drop(columns=["analysis_id"], errors="ignore")
                                 df_to_insert.to_sql(name="dcf_analyses", con=engine, if_exists="append", index=False)
                                 st.success(f"✅ Se insertaron {len(df_to_insert)} registros en la tabla `dcf_analyses`.")
@@ -147,34 +143,27 @@ def render():
                     elif "year_index" in df_first_sheet.columns and ("valuation_id" in df_first_sheet.columns or "analysis_id" in df_first_sheet.columns):
                         st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura directa de **dcf_projections** ({len(df_first_sheet)} registros).")
                         
-                        # 1. Normalizar FK valuation_id -> analysis_id si es necesario
                         if "valuation_id" in df_first_sheet.columns:
                             df_first_sheet = df_first_sheet.rename(columns={"valuation_id": "analysis_id"})
 
-                        # 2. Obtener lista de analysis_id existentes en la base de datos
                         try:
                             existing_ids = pd.read_sql("SELECT DISTINCT analysis_id FROM dcf_analyses", con=engine)["analysis_id"].tolist()
                         except Exception as e:
                             existing_ids = []
                             st.warning(f"⚠️ No se pudo consultar `dcf_analyses`: {e}")
 
-                        # 3. Detectar si hay IDs en el Excel que NO existen en MySQL
                         excel_analysis_ids = df_first_sheet["analysis_id"].dropna().unique().tolist()
                         missing_ids = [aid for aid in excel_analysis_ids if aid not in existing_ids]
 
                         if missing_ids:
                             st.error(
-                                f"❌ **Error de Clave Foránea (FK):** El archivo contiene `analysis_id` que no existen en la tabla `dcf_analyses`: **{missing_ids}**.\n\n"
-                                f"Debes cargar primero los registros correspondientes en la tabla `dcf_analyses` antes de insertar las proyecciones."
+                                f"❌ **Error de Clave Foránea (FK):** El archivo contiene `analysis_id` que no existen en `dcf_analyses`: **{missing_ids}**.\n\n"
+                                f"Carga primero el archivo de análisis en MySQL."
                             )
                         else:
-                            # 4. Si todos los analysis_id existen, se habilita la inserción
                             if st.button(f"🚀 Insertar {uploaded_file.name} en `dcf_projections`", key=f"btn_proj_{uploaded_file.name}"):
                                 try:
-                                    # Ignorar clave primaria autoincremental 'id' si viene en el Excel
                                     df_to_insert = df_first_sheet.drop(columns=["id"], errors="ignore")
-                                    
-                                    # Inserción masiva mediante to_sql
                                     df_to_insert.to_sql(name="dcf_projections", con=engine, if_exists="append", index=False)
                                     st.success(f"✅ Se insertaron {len(df_to_insert)} proyecciones exitosamente en `dcf_projections`.")
                                 except Exception as e:
@@ -186,7 +175,6 @@ def render():
                     else:
                         st.info(f"📄 Archivo **{uploaded_file.name}** procesado como Modelo Interactivo (Inputs + Projections).")
                         
-                        # 1. PARSEAR HOJA DE INPUTS (PARÁMETROS GENERALES)
                         inputs_sheet = "Inputs" if "Inputs" in sheet_names else sheet_names[0]
                         df_inputs_raw = pd.read_excel(excel_file, sheet_name=inputs_sheet)
 
@@ -198,161 +186,121 @@ def render():
 
                         inputs_dict = {clean_str(row[p_col]): row[v_col] for _, row in df_inputs_raw.iterrows()}
 
+                        # Función auxiliar para convertir porcentajes de manera consistente
+                        def to_dec(val):
+                            v = parse_num(val)
+                            return v / 100.0 if v > 1.0 else v
+
                         comp_id = int(parse_num(inputs_dict.get("company_id", inputs_dict.get("id_empresa", 1))))
                         scen_name = str(inputs_dict.get("scenario_name", inputs_dict.get("escenario", "Base")))
                         hist_rev = parse_num(inputs_dict.get("historical_revenue", inputs_dict.get("ingresos_historicos", 0)))
-                        tax_rate = parse_num(inputs_dict.get("tax_rate", inputs_dict.get("tasa_impuesto", 0)))
-                        capex_pct = parse_num(inputs_dict.get("capex_percent", inputs_dict.get("capex_pct", 0)))
-                        nwc_pct = parse_num(inputs_dict.get("nwc_percent", inputs_dict.get("nwc_pct", 0)))
-                        da_pct = parse_num(inputs_dict.get("da_percent", inputs_dict.get("da_pct", 0)))
-                        wacc = parse_num(inputs_dict.get("wacc", 0))
-                        g_term = parse_num(inputs_dict.get("terminal_growth_rate", inputs_dict.get("crecimiento_terminal", 0)))
+                        tax_rate = to_dec(inputs_dict.get("tax_rate", inputs_dict.get("tasa_impuesto", 0)))
+                        capex_pct = to_dec(inputs_dict.get("capex_percent", inputs_dict.get("capex_pct", 0)))
+                        nwc_pct = to_dec(inputs_dict.get("nwc_percent", inputs_dict.get("nwc_pct", 0)))
+                        da_pct = to_dec(inputs_dict.get("da_percent", inputs_dict.get("da_pct", 0)))
+                        wacc_dec = to_dec(inputs_dict.get("wacc", 0))
+                        g_term_dec = to_dec(inputs_dict.get("terminal_growth_rate", inputs_dict.get("crecimiento_terminal", 0)))
                         net_debt = parse_num(inputs_dict.get("net_debt", inputs_dict.get("deuda_neta", 0)))
 
-                        # 2. PARSEAR HOJA DE PROYECCIONES
                         proj_sheet = "Projections" if "Projections" in sheet_names else (sheet_names[1] if len(sheet_names) > 1 else sheet_names[0])
                         df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet).dropna(how="all")
 
                         if str(df_projs.columns[0]).startswith("Unnamed"):
                             df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet, header=1)
 
-                        st.success(f"📋 Modelo interpretado. Company ID: **{comp_id}** | Escenario: **{scen_name}** | Años: **{len(df_projs)}**")
-
-                        # 3. CÁLCULO PREVIO DE VALORES TERMINALES Y DE EMPRESA
-                        wacc_dec = wacc / 100.0 if wacc > 1 else wacc
-                        g_term_dec = g_term / 100.0 if g_term > 1 else g_term
-
-                        # Recorrer para calcular el último FCF proyectado
+                        # Cálculo en un solo paso y almacenamiento en memoria
+                        calculated_projections = []
                         curr_rev = hist_rev
                         prev_rev = hist_rev
-                        last_fcf = 0.0
                         sum_pv_fcf = 0.0
-                        n_years = len(df_projs)
 
                         for idx, row in df_projs.iterrows():
                             year_index = idx + 1
-                            g_rate = parse_num(row.get("growth_rate", 0))
-                            ebit_m = parse_num(row.get("ebit_margin", 0))
-
-                            if g_rate > 1.0: g_rate /= 100.0
-                            if ebit_m > 1.0: ebit_m /= 100.0
+                            year_label = str(row.get("year_label", f"Año {year_index}"))
+                            g_rate = to_dec(row.get("growth_rate", 0))
+                            ebit_m = to_dec(row.get("ebit_margin", 0))
 
                             p_rev = curr_rev * (1 + g_rate)
                             ebit = p_rev * ebit_m
-                            nopat = ebit * (1 - (tax_rate / 100.0 if tax_rate > 1 else tax_rate))
-                            da = p_rev * (da_pct / 100.0 if da_pct > 1 else da_pct)
-                            capex = p_rev * (capex_pct / 100.0 if capex_pct > 1 else capex_pct)
-                            nwc_change = (p_rev - prev_rev) * (nwc_pct / 100.0 if nwc_pct > 1 else nwc_pct)
+                            nopat = ebit * (1 - tax_rate)
+                            da = p_rev * da_pct
+                            capex = p_rev * capex_pct
+                            nwc_change = (p_rev - prev_rev) * nwc_pct
                             
-                            last_fcf = nopat + da - capex - nwc_change
-                            sum_pv_fcf += last_fcf / ((1 + wacc_dec) ** year_index)
-                            
+                            fcf = nopat + da - capex - nwc_change
+                            pv_fcf = fcf / ((1 + wacc_dec) ** year_index)
+                            sum_pv_fcf += pv_fcf
+
+                            calculated_projections.append({
+                                "year_index": year_index,
+                                "year_label": year_label,
+                                "growth_rate": g_rate,
+                                "ebit_margin": ebit_m,
+                                "projected_revenue": p_rev,
+                                "ebit": ebit,
+                                "nopat": nopat,
+                                "da": da,
+                                "capex": capex,
+                                "nwc_change": nwc_change,
+                                "fcf": fcf,
+                                "pv_fcf": pv_fcf
+                            })
+
                             prev_rev = p_rev
                             curr_rev = p_rev
 
-                        # Fórmulas de Terminal Value, EV y Equity Value
-                        if wacc_dec > g_term_dec:
-                            terminal_value = (last_fcf * (1 + g_term_dec)) / (wacc_dec - g_term_dec)
-                        else:
-                            terminal_value = 0.0
-
+                        # Métricas terminales
+                        n_years = len(calculated_projections)
+                        last_fcf = calculated_projections[-1]["fcf"] if n_years > 0 else 0.0
+                        
+                        terminal_value = (last_fcf * (1 + g_term_dec)) / (wacc_dec - g_term_dec) if wacc_dec > g_term_dec else 0.0
                         pv_terminal_value = terminal_value / ((1 + wacc_dec) ** n_years) if n_years > 0 else 0.0
                         enterprise_value = sum_pv_fcf + pv_terminal_value
                         equity_value = enterprise_value - net_debt
 
-                        # 4. REDIRECCIONAMIENTO E INSERCIÓN A TABLAS OFICIALES
+                        st.success(f"📋 Modelo interpretado. Company ID: **{comp_id}** | Escenario: **{scen_name}** | Años: **{n_years}**")
+
                         if st.button(f"🚀 Guardar {uploaded_file.name} en MySQL", key=f"btn_gen_{uploaded_file.name}"):
-                            with engine.begin() as conn:
-                                # A) Insertar encabezado en `dcf_analyses` (incluyendo columnas calculadas)
-                                query_analysis = text("""
-                                    INSERT INTO dcf_analyses (
-                                        company_id, scenario_name, historical_revenue, tax_rate, 
-                                        capex_percent, nwc_percent, da_percent, wacc, 
-                                        terminal_growth_rate, net_debt, terminal_value, enterprise_value, equity_value
-                                    ) VALUES (
-                                        :company_id, :scenario_name, :historical_revenue, :tax_rate, 
-                                        :capex_percent, :nwc_percent, :da_percent, :wacc, 
-                                        :terminal_growth_rate, :net_debt, :terminal_value, :enterprise_value, :equity_value
-                                    )
-                                """)
-                                
-                                res_an = conn.execute(query_analysis, {
-                                    "company_id": comp_id,
-                                    "scenario_name": scen_name,
-                                    "historical_revenue": hist_rev,
-                                    "tax_rate": tax_rate,
-                                    "capex_percent": capex_pct,
-                                    "nwc_percent": nwc_pct,
-                                    "da_percent": da_pct,
-                                    "wacc": wacc,
-                                    "terminal_growth_rate": g_term,
-                                    "net_debt": net_debt,
-                                    "terminal_value": terminal_value,
-                                    "enterprise_value": enterprise_value,
-                                    "equity_value": equity_value
-                                })
-                                
-                                analysis_id = res_an.lastrowid
-
-                                # B) Insertar líneas en `dcf_projections`
-                                query_projections = text("""
-                                    INSERT INTO dcf_projections (
-                                        analysis_id, year_index, year_label, growth_rate, ebit_margin,
-                                        projected_revenue, ebit, nopat, da, capex, nwc_change, fcf, pv_fcf
-                                    ) VALUES (
-                                        :analysis_id, :year_index, :year_label, :growth_rate, :ebit_margin,
-                                        :projected_revenue, :ebit, :nopat, :da, :capex, :nwc_change, :fcf, :pv_fcf
-                                    )
-                                """)
-
-                                curr_rev = hist_rev
-                                prev_rev = hist_rev
-
-                                for idx, row in df_projs.iterrows():
-                                    year_index = idx + 1
-                                    year_label = str(row.get("year_label", f"Año {year_index}"))
-                                    
-                                    g_rate = parse_num(row.get("growth_rate", 0))
-                                    ebit_m = parse_num(row.get("ebit_margin", 0))
-
-                                    if g_rate > 1.0: g_rate /= 100.0
-                                    if ebit_m > 1.0: ebit_m /= 100.0
-
-                                    p_rev = curr_rev * (1 + g_rate)
-                                    ebit = p_rev * ebit_m
-                                    nopat = ebit * (1 - (tax_rate / 100.0 if tax_rate > 1 else tax_rate))
-                                    da = p_rev * (da_pct / 100.0 if da_pct > 1 else da_pct)
-                                    capex = p_rev * (capex_pct / 100.0 if capex_pct > 1 else capex_pct)
-                                    
-                                    rev_change = p_rev - prev_rev
-                                    nwc_change = rev_change * (nwc_pct / 100.0 if nwc_pct > 1 else nwc_pct)
-                                    
-                                    fcf = nopat + da - capex - nwc_change
-                                    pv_fcf = fcf / ((1 + wacc_dec) ** year_index)
-
-                                    conn.execute(query_projections, {
-                                        "analysis_id": analysis_id,
-                                        "year_index": year_index,
-                                        "year_label": year_label,
-                                        "growth_rate": g_rate,
-                                        "ebit_margin": ebit_m,
-                                        "projected_revenue": p_rev,
-                                        "ebit": ebit,
-                                        "nopat": nopat,
-                                        "da": da,
-                                        "capex": capex,
-                                        "nwc_change": nwc_change,
-                                        "fcf": fcf,
-                                        "pv_fcf": pv_fcf
+                            try:
+                                with engine.begin() as conn:
+                                    res_an = conn.execute(text("""
+                                        INSERT INTO dcf_analyses (
+                                            company_id, scenario_name, historical_revenue, tax_rate, 
+                                            capex_percent, nwc_percent, da_percent, wacc, 
+                                            terminal_growth_rate, net_debt, terminal_value, enterprise_value, equity_value
+                                        ) VALUES (
+                                            :company_id, :scenario_name, :historical_revenue, :tax_rate, 
+                                            :capex_percent, :nwc_percent, :da_percent, :wacc, 
+                                            :terminal_growth_rate, :net_debt, :terminal_value, :enterprise_value, :equity_value
+                                        )
+                                    """), {
+                                        "company_id": comp_id, "scenario_name": scen_name, "historical_revenue": hist_rev,
+                                        "tax_rate": tax_rate, "capex_percent": capex_pct, "nwc_percent": nwc_pct,
+                                        "da_percent": da_pct, "wacc": wacc_dec, "terminal_growth_rate": g_term_dec,
+                                        "net_debt": net_debt, "terminal_value": terminal_value,
+                                        "enterprise_value": enterprise_value, "equity_value": equity_value
                                     })
+                                    
+                                    analysis_id = res_an.lastrowid
 
-                                    prev_rev = p_rev
-                                    curr_rev = p_rev
+                                    for proj in calculated_projections:
+                                        proj["analysis_id"] = analysis_id
+                                        conn.execute(text("""
+                                            INSERT INTO dcf_projections (
+                                                analysis_id, year_index, year_label, growth_rate, ebit_margin,
+                                                projected_revenue, ebit, nopat, da, capex, nwc_change, fcf, pv_fcf
+                                            ) VALUES (
+                                                :analysis_id, :year_index, :year_label, :growth_rate, :ebit_margin,
+                                                :projected_revenue, :ebit, :nopat, :da, :capex, :nwc_change, :fcf, :pv_fcf
+                                            )
+                                        """), proj)
 
-                            st.success(f"✅ ¡Se insertó el análisis ID **#{analysis_id}** en `dcf_analyses` y **{len(df_projs)}** proyecciones en `dcf_projections`!")
+                                st.success(f"✅ ¡Análisis ID **#{analysis_id}** y **{n_years}** proyecciones guardados con éxito!")
+                            except Exception as e:
+                                st.error(f"❌ Error al procesar la inserción en MySQL: {e}")
 
                 except Exception as e:
-                    st.error(f"❌ Error al procesar el archivo **{uploaded_file.name}**: {e}")
+                    st.error(f"❌ Error al leer el archivo **{uploaded_file.name}**: {e}")
 
     # -------------------------------------------------------------------------
     # CONTROLES SIDEBAR (FILTROS DE CONSULTA A MYSQL)
