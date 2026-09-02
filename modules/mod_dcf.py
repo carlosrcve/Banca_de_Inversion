@@ -147,18 +147,38 @@ def render():
                     elif "year_index" in df_first_sheet.columns and ("valuation_id" in df_first_sheet.columns or "analysis_id" in df_first_sheet.columns):
                         st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura directa de **dcf_projections** ({len(df_first_sheet)} registros).")
                         
-                        # Normalizar FK valuation_id -> analysis_id si es necesario
+                        # 1. Normalizar FK valuation_id -> analysis_id si es necesario
                         if "valuation_id" in df_first_sheet.columns:
                             df_first_sheet = df_first_sheet.rename(columns={"valuation_id": "analysis_id"})
 
-                        if st.button(f"🚀 Insertar {uploaded_file.name} en `dcf_projections`", key=f"btn_proj_{uploaded_file.name}"):
-                            try:
-                                # Ignorar clave primaria autoincremental si viene en el Excel
-                                df_to_insert = df_first_sheet.drop(columns=["id"], errors="ignore")
-                                df_to_insert.to_sql(name="dcf_projections", con=engine, if_exists="append", index=False)
-                                st.success(f"✅ Se insertaron {len(df_to_insert)} proyecciones en la tabla `dcf_projections`.")
-                            except Exception as e:
-                                st.error(f"❌ Error al insertar en dcf_projections: {e}")
+                        # 2. Obtener lista de analysis_id existentes en la base de datos
+                        try:
+                            existing_ids = pd.read_sql("SELECT DISTINCT analysis_id FROM dcf_analyses", con=engine)["analysis_id"].tolist()
+                        except Exception as e:
+                            existing_ids = []
+                            st.warning(f"⚠️ No se pudo consultar `dcf_analyses`: {e}")
+
+                        # 3. Detectar si hay IDs en el Excel que NO existen en MySQL
+                        excel_analysis_ids = df_first_sheet["analysis_id"].dropna().unique().tolist()
+                        missing_ids = [aid for aid in excel_analysis_ids if aid not in existing_ids]
+
+                        if missing_ids:
+                            st.error(
+                                f"❌ **Error de Clave Foránea (FK):** El archivo contiene `analysis_id` que no existen en la tabla `dcf_analyses`: **{missing_ids}**.\n\n"
+                                f"Debes cargar primero los registros correspondientes en la tabla `dcf_analyses` antes de insertar las proyecciones."
+                            )
+                        else:
+                            # 4. Si todos los analysis_id existen, se habilita la inserción
+                            if st.button(f"🚀 Insertar {uploaded_file.name} en `dcf_projections`", key=f"btn_proj_{uploaded_file.name}"):
+                                try:
+                                    # Ignorar clave primaria autoincremental 'id' si viene en el Excel
+                                    df_to_insert = df_first_sheet.drop(columns=["id"], errors="ignore")
+                                    
+                                    # Inserción masiva mediante to_sql
+                                    df_to_insert.to_sql(name="dcf_projections", con=engine, if_exists="append", index=False)
+                                    st.success(f"✅ Se insertaron {len(df_to_insert)} proyecciones exitosamente en `dcf_projections`.")
+                                except Exception as e:
+                                    st.error(f"❌ Error al insertar en dcf_projections: {e}")
 
                     # =========================================================================
                     # CASO 3: ARCHIVO MODELO INTERNO (HOJAS "Inputs" Y "Projections")
