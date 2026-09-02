@@ -1,4 +1,5 @@
 # portfolio_controller.py
+# portfolio_controller.py
 import os
 import sys
 
@@ -17,11 +18,17 @@ class PortfolioController:
         asset_type: str,
         price: float,
         change_percent: float,
-    ) -> bool:
-        """Inserta una cotización de mercado en la tabla market_quotes de TiDB Cloud."""
+    ) -> tuple[bool, str]:
+        """Inserta una cotización de mercado en la tabla market_quotes de TiDB Cloud.
+
+        Retorna (True, "Mensaje de éxito") o (False, "Detalle del error").
+        """
         conn = get_db_connection()
         if not conn:
-            return False
+            return (
+                False,
+                "No se pudo establecer conexión con la base de datos (get_db_connection devolvió None). Revisa tus secrets/variables de entorno.",
+            )
 
         try:
             cursor = conn.cursor()
@@ -36,16 +43,17 @@ class PortfolioController:
             conn.commit()
             cursor.close()
             conn.close()
-            return True
+            return True, "Guardado exitosamente."
         except Exception as e:
-            print(f"Error al guardar cotización en TiDB: {e}")
+            error_msg = str(e)
+            print(f"Error al guardar cotización en TiDB: {error_msg}")
             if conn:
                 try:
                     conn.rollback()
                 except Exception:
                     pass
                 conn.close()
-            return False
+            return False, error_msg
 
     @staticmethod
     def create_portfolio(
@@ -107,7 +115,6 @@ class PortfolioController:
             return []
 
         try:
-            # Intento genérico compatible con mysql.connector y pymysql
             try:
                 cursor = conn.cursor(dictionary=True)
             except (TypeError, AttributeError):
