@@ -528,6 +528,22 @@ def render():
             "Sube y administra comprobantes, transferencias, PDFs o archivos de Office de forma organizada."
         )
 
+        # --- LEYENDA EXPLICATIVA ---
+        # Opción A: Usando HTML personalizado (siguiendo el estilo de html_interpretation)
+        leyenda_archivos_html = (
+            '<div style="background-color: #fff3cd; border-left: 5px solid #ffc107; padding: 15px 18px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #856404; margin-bottom: 20px;">'
+            '<div style="font-size: 1rem; font-weight: bold; margin-bottom: 6px; color: #856404;">⚠️ Nota sobre Archivos Demostrativos:</div>'
+            '<div style="font-size: 0.95rem; line-height: 1.5;">'
+            'Los archivos cargados previamente en esta sección corresponden a <b>datos demostrativos o de prueba</b> necesarios para el cálculo del flujo de caja de contado. '
+            'Para realizar sus análisis financieros reales, <b>utilice este gestor para subir y reemplazar con sus propios archivos y datos</b>.'
+            '</div>'
+            '</div>'
+        )
+        st.markdown(leyenda_archivos_html, unsafe_allow_html=True)
+
+        # Opción B (Alternativa rápida nativa de Streamlit):
+        # st.info("ℹ️ **Archivos Demostrativos:** Los documentos presentes son de prueba para el cálculo del flujo de caja de contado. Por favor, utilice esta herramienta para subir sus propios datos financieros.")
+
         engine = get_sqlalchemy_engine()
 
         # Crear la tabla automáticamente si no existe en MySQL / TiDB
