@@ -1,9 +1,11 @@
 # dcf_controller.py
+# dcf_controller.py
 import os
 from typing import Any, Dict, List, Optional
 import mysql.connector
 from mysql.connector import Error
 from sqlalchemy import create_engine
+
 from dcf_engine import DCFEngine
 from dcf_models import DCFInputs, DCFResults
 
@@ -144,18 +146,18 @@ class DCFController:
             analysis_data = (
                 company_id,
                 scenario_name,
-                inputs.historical_revenue,
-                inputs.tax_rate,
-                inputs.capex_percent,
-                inputs.nwc_percent,
-                inputs.da_percent,
-                inputs.wacc,
-                inputs.terminal_growth_rate,
-                inputs.net_debt,
-                results.terminal_value,
-                results.pv_terminal_value,
-                results.enterprise_value,
-                results.equity_value,
+                float(inputs.historical_revenue),
+                float(inputs.tax_rate),
+                float(inputs.capex_percent),
+                float(inputs.nwc_percent),
+                float(inputs.da_percent),
+                float(inputs.wacc),
+                float(inputs.terminal_growth_rate),
+                float(inputs.net_debt),
+                float(results.terminal_value),
+                float(results.pv_terminal_value),
+                float(results.enterprise_value),
+                float(results.equity_value),
             )
             cursor.execute(query_analysis, analysis_data)
             analysis_id = cursor.lastrowid
@@ -173,13 +175,13 @@ class DCFController:
                 record = (
                     analysis_id,
                     i + 1,
-                    inputs.growth_rates[i],
-                    inputs.ebit_margins[i],
-                    results.projected_revenues[i],
-                    results.projected_ebit[i],
-                    results.projected_nopat[i],
-                    results.free_cash_flows[i],
-                    results.pv_cash_flows[i],
+                    float(inputs.growth_rates[i]),
+                    float(inputs.ebit_margins[i]),
+                    float(results.projected_revenues[i]),
+                    float(results.projected_ebit[i]),
+                    float(results.projected_nopat[i]),
+                    float(results.free_cash_flows[i]),
+                    float(results.pv_cash_flows[i]),
                 )
                 yearly_records.append(record)
 
@@ -218,3 +220,30 @@ class DCFController:
         finally:
             cursor.close()
             conn.close()
+
+
+def calculate_dcf(
+    revenue: float,
+    growth_rates: List[float],
+    ebit_margins: List[float],
+    tax_rate: float,
+    capex_pct: float,
+    nwc_pct: float,
+    da_pct: float,
+    wacc: float,
+    g: float,
+    net_debt: float,
+) -> DCFResults:
+    """Wrapper global que redirige la llamada a DCFController.run_valuation."""
+    return DCFController.run_valuation(
+        historical_revenue=revenue,
+        growth_rates=growth_rates,
+        ebit_margins=ebit_margins,
+        tax_rate=tax_rate,
+        capex_percent=capex_pct,
+        nwc_percent=nwc_pct,
+        da_percent=da_pct,
+        wacc=wacc,
+        terminal_growth_rate=g,
+        net_debt=net_debt,
+    )
