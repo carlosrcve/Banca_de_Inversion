@@ -564,6 +564,18 @@ def render():
     with tab4:
         st.header("💾 Base de Datos, Historial & Plantillas Muestra")
 
+        # 📌 DEFINE LA VARIABLE 'caso_seleccionado' PARA EVITAR EL NameError
+        caso_seleccionado = st.selectbox(
+            "Selecciona la modalidad de carga:",
+            [
+                "Caso 1: Archivo Único",
+                "Caso 2: Análisis Simple",
+                "Caso 3: Carga Avanzada",
+                "Caso 4: Persistencia MySQL (Tabla Padre/Hijo)"
+            ],
+            key="tab4_caso_seleccionado"
+        )
+
         # 📌 DESCARGA DE ARCHIVOS EXCEL FIJOS DESDE DISCO
         with st.expander("📥 **Descargar Archivos de Muestra Fijos (Excel)**", expanded=True):
             st.write("Descarga los archivos Excel modelo fijos almacenados en el proyecto:")
@@ -615,6 +627,10 @@ def render():
                     st.warning(f"⚠️ No se encontró '{file_path}'.")
 
         st.markdown("---")
+
+        # 📌 EVALUACIÓN CONDICIONAL DEL CASO SELECCIONADO
+        if caso_seleccionado == "Caso 4: Persistencia MySQL (Tabla Padre/Hijo)":
+            st.info("ℹ️ Modalidad 'Caso 4: Persistencia MySQL' activa.")
 
         # 📌 SECCIÓN DE CONSULTAS SQL E HISTORIAL
         st.subheader("⚙️ Consultas y Registros Guardados")
