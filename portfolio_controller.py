@@ -32,10 +32,10 @@ class PortfolioController:
             print(f"--> PYTHON ESCRIBIENDO EN BD: {db_info}")
             # ---------------------------------------
 
-            query = """
-                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent, recorded_at)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW())
-            """
+            query = text("""
+                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent)
+                VALUES (:symbol, :asset_name, :asset_type, :price, :currency, :change_percent)
+            """)
             cursor.execute(
                 query,
                 (
