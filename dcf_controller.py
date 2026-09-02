@@ -42,10 +42,10 @@ def get_db_credentials() -> dict:
     return credentials
 
 
+
 def get_db_connection():
-    """Establece conexión nativa con TiDB Cloud usando credenciales fijas y SSL."""
+    """Establece conexión con TiDB Cloud y muestra el error exacto si falla."""
     try:
-        # Contexto SSL obligatorio para TiDB Cloud
         ssl_context = ssl.create_default_context()
         
         connection = pymysql.connect(
@@ -59,7 +59,9 @@ def get_db_connection():
         )
         return connection
     except Exception as e:
-        print(f"🔥 ERROR REAL DE CONEXIÓN EN dcf_controller.py: {repr(e)}")
+        # Esto pintará el error técnico exacto en tu pantalla de Streamlit
+        st.error(f"🔥 ERROR TÉCNICO DE PYMYSQL: {repr(e)}")
+        print(f"🔥 ERROR TÉCNICO DE PYMYSQL: {repr(e)}")
         return None
 
 

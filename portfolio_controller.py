@@ -13,32 +13,25 @@ class PortfolioController:
 
     @staticmethod
     def save_market_quote(symbol, asset_name, asset_type, price, change_percent):
-        """Guarda una cotización de mercado y retorna el error si falla."""
-        conn = get_db_connection()
-        if not conn:
-            return False, "No se pudo establecer la conexión con la base de datos."
-
+        """Guarda una cotización usando SQLAlchemy de forma idéntica al resto de la app."""
         try:
-            cursor = conn.cursor()
-            query = """
-                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
-                VALUES (%s, %s, %s, %s, %s)
-            """
-            cursor.execute(query, (symbol, asset_name, asset_type, price, change_percent))
-            
-            conn.commit()
-            cursor.close()
-            conn.close()
+            engine = get_sqlalchemy_engine()  # Usa el mismo motor configurado en tu app
+            with engine.begin() as conn:
+                query = text("""
+                    INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
+                    VALUES (:symbol, :asset_name, :asset_type, :price, :change_percent)
+                """)
+                conn.execute(query, {
+                    "symbol": symbol,
+                    "asset_name": asset_name,
+                    "asset_type": asset_type,
+                    "price": price,
+                    "change_percent": change_percent
+                })
             return True, ""
         except Exception as e:
             error_msg = str(e)
-            print(f"❌ ERROR DETALLADO AL INSERTAR EN market_quotes: {repr(e)}")
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-                conn.close()
+            print(f"❌ Error al guardar cotización: {e}")
             return False, error_msg
             
     @staticmethod
