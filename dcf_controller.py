@@ -1,5 +1,4 @@
 # dcf_controller.py
-# dcf_controller.py
 import os
 from typing import Any, Dict, List, Optional
 import mysql.connector
@@ -11,21 +10,18 @@ from dcf_models import DCFInputs, DCFResults
 
 
 def get_db_credentials() -> dict:
-    """Extrae las credenciales probando st.secrets (bloque [mysql] o claves individuales)
-    y fallbacks de os.getenv.
-    """
+    """Extrae las credenciales probando st.secrets y fallbacks de variables de entorno."""
     credentials = {
-        "host": "gateway01.us-east-1.prod.aws.tidbcloud.com",
-        "user": "4K4VAw4t4ZPFUTF.root",
-        "password": "I1lVZQDq2d4KJbQA",
-        "database": "valuations_db",
-        "port": 4000,
+        "host": os.getenv("MYSQL_HOST", "gateway01.us-east-1.prod.aws.tidbcloud.com"),
+        "user": os.getenv("MYSQL_USER", ""),
+        "password": os.getenv("MYSQL_PASSWORD", ""),
+        "database": os.getenv("MYSQL_DATABASE", "valuations_db"),
+        "port": int(os.getenv("MYSQL_PORT", 4000)),
     }
 
     try:
         import streamlit as st
 
-        # 1. Intentar desde st.secrets ["mysql"]
         if "mysql" in st.secrets:
             sec = st.secrets["mysql"]
             credentials["host"] = sec.get("host", credentials["host"])
@@ -33,8 +29,6 @@ def get_db_credentials() -> dict:
             credentials["password"] = sec.get("password", credentials["password"])
             credentials["database"] = sec.get("database", credentials["database"])
             credentials["port"] = int(sec.get("port", credentials["port"]))
-
-        # 2. Intentar desde st.secrets a nivel raíz
         else:
             credentials["host"] = st.secrets.get("MYSQL_HOST", credentials["host"])
             credentials["user"] = st.secrets.get("MYSQL_USER", credentials["user"])
@@ -43,18 +37,13 @@ def get_db_credentials() -> dict:
             credentials["port"] = int(st.secrets.get("MYSQL_PORT", credentials["port"]))
 
     except Exception:
-        # Fallback a variables de entorno del sistema
-        credentials["host"] = os.getenv("MYSQL_HOST", credentials["host"])
-        credentials["user"] = os.getenv("MYSQL_USER", credentials["user"])
-        credentials["password"] = os.getenv("MYSQL_PASSWORD", credentials["password"])
-        credentials["database"] = os.getenv("MYSQL_DATABASE", credentials["database"])
-        credentials["port"] = int(os.getenv("MYSQL_PORT", credentials["port"]))
+        pass
 
     return credentials
 
 
 def get_db_connection():
-    """Establece la conexión con mysql.connector (usado por el controlador)."""
+    """Establece la conexión con mysql.connector."""
     try:
         creds = get_db_credentials()
         config = {
@@ -77,10 +66,16 @@ def get_db_connection():
 
 
 def get_sqlalchemy_engine():
-    """Genera el Engine de SQLAlchemy de forma segura (usado por Pandas / .to_sql)."""
+    """Genera el Engine de SQLAlchemy para Pandas."""
     creds = get_db_credentials()
     db_url = f"mysql+pymysql://{creds['user']}:{creds['password']}@{creds['host']}:{creds['port']}/{creds['database']}"
     return create_engine(db_url)
+
+
+def _to_decimal(val: float) -> float:
+    """Asegura que las tasas de % estén expresadas en rango 0.0 - 1.0 (ej. 15 -> 0.15)."""
+    val = float(val)
+    return val / 100.0 if abs(val) > 1.0 else val
 
 
 class DCFController:
@@ -99,17 +94,22 @@ class DCFController:
         terminal_growth_rate: float,
         net_debt: float,
     ) -> DCFResults:
+        
+        # Sanitizar valores % para evitar errores de escala (15.0 -> 0.15)
+        clean_growth = [_to_decimal(g) for g in growth_rates]
+        clean_ebit = [_to_decimal(m) for m in ebit_margins]
+
         inputs = DCFInputs(
-            historical_revenue=historical_revenue,
-            growth_rates=growth_rates,
-            ebit_margins=ebit_margins,
-            tax_rate=tax_rate,
-            capex_percent=capex_percent,
-            nwc_percent=nwc_percent,
-            da_percent=da_percent,
-            wacc=wacc,
-            terminal_growth_rate=terminal_growth_rate,
-            net_debt=net_debt,
+            historical_revenue=float(historical_revenue),
+            growth_rates=clean_growth,
+            ebit_margins=clean_ebit,
+            tax_rate=_to_decimal(tax_rate),
+            capex_percent=_to_decimal(capex_percent),
+            nwc_percent=_to_decimal(nwc_percent),
+            da_percent=_to_decimal(da_percent),
+            wacc=_to_decimal(wacc),
+            terminal_growth_rate=_to_decimal(terminal_growth_rate),
+            net_debt=float(net_debt),
         )
         return DCFEngine.calculate(inputs)
 
@@ -234,7 +234,6 @@ def calculate_dcf(
     g: float,
     net_debt: float,
 ) -> DCFResults:
-    """Wrapper global que redirige la llamada a DCFController.run_valuation."""
     return DCFController.run_valuation(
         historical_revenue=revenue,
         growth_rates=growth_rates,
