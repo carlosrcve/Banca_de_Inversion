@@ -143,24 +143,24 @@ def render():
                     elif "year_index" in df_first_sheet.columns and ("valuation_id" in df_first_sheet.columns or "analysis_id" in df_first_sheet.columns):
                         st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura directa de **dcf_projections** ({len(df_first_sheet)} registros).")
                         
-                        # 1. Asegurar que la columna del DataFrame coincida exactamente con la tabla (valuation_id)
-                        if "analysis_id" in df_first_sheet.columns and "valuation_id" not in df_first_sheet.columns:
-                            df_first_sheet = df_first_sheet.rename(columns={"analysis_id": "valuation_id"})
+                        # 1. Normalizar columna para MySQL: Asegurar que el DataFrame use 'analysis_id'
+                        if "valuation_id" in df_first_sheet.columns:
+                            df_first_sheet = df_first_sheet.rename(columns={"valuation_id": "analysis_id"})
 
-                        # 2. Inserción Directa a MySQL
+                        # 2. Inserción Directa
                         if st.button(f"🚀 Insertar {uploaded_file.name} en `dcf_projections`", key=f"btn_proj_{uploaded_file.name}"):
                             try:
-                                # Eliminar columnas autogeneradas por la base de datos (id autoincremental, fecha)
+                                # Eliminar columnas autogeneradas si existen
                                 df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
                                 
-                                # Guardar en la tabla dcf_projections
+                                # Guardar registros en la BD
                                 df_to_insert.to_sql(
                                     name="dcf_projections", 
                                     con=engine, 
                                     if_exists="append", 
                                     index=False
                                 )
-                                st.success(f"✅ Se insertaron {len(df_to_insert)} registros exitosamente en la tabla `dcf_projections`.")
+                                st.success(f"✅ Se insertaron {len(df_to_insert)} proyecciones con éxito en `dcf_projections`.")
                             except Exception as e:
                                 st.error(f"❌ Error al insertar en `dcf_projections`: {e}")
 
