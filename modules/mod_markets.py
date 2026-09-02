@@ -4,7 +4,6 @@ import yfinance as yf
 from portfolio_controller import PortfolioController
 
 
-
 # -------------------------------------------------------------------------
 # FUNCIÓN EN CACHÉ PARA CARGAR LAS ACCIONES DEL S&P 500 DINÁMICAMENTE
 # -------------------------------------------------------------------------
@@ -48,22 +47,21 @@ def load_sp500_tickers():
             "BAC - Bank of America": "BAC",
             "DIS - Walt Disney Co.": "DIS"
         }
+
+@st.cache_data(ttl=120, show_spinner=False)
 def get_ticker_snapshot(symbol: str):
-    """Función auxiliar para obtener precio y cambio porcentual de forma segura."""
+    """Obtiene de forma segura el precio actual y variación del ticker con caché."""
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.fast_info
         price = info.get("lastPrice", 0.0) or 0.0
         prev = info.get("previousClose", price) or price
         change_pct = ((price - prev) / prev * 100) if prev else 0.0
-        return price, change_pct
+        return float(price), float(change_pct)
     except Exception:
         return 0.0, 0.0
 
-import pandas as pd
-import streamlit as st
-import yfinance as yf
-from portfolio_controller import PortfolioController
+
 
 
 def get_ticker_snapshot(symbol: str):
@@ -78,6 +76,85 @@ def get_ticker_snapshot(symbol: str):
     except Exception:
         return 0.0, 0.0
 
+@st.fragment
+def render_metals_column():
+    st.subheader("🪙 Metales y Commodities")
+    dict_metales = {
+        "Oro (Gold Spot)": "GC=F",
+        "Plata (Silver)": "SI=F",
+        "Cobre (Copper)": "HG=F",
+        "Platino (Platinum)": "PL=F",
+        "Petróleo WTI": "CL=F",
+    }
+    selected_metal_name = st.selectbox(
+        "Seleccione el Metal:", list(dict_metales.keys()), key="sel_metal"
+    )
+    metal_ticker = dict_metales[selected_metal_name]
+
+    m_price, m_chg = get_ticker_snapshot(metal_ticker)
+    st.metric(selected_metal_name, f"${m_price:,.2f}", f"{m_chg:+.2f}%")
+
+    if st.button(f"💾 Guardar {selected_metal_name}", key="save_metal_btn"):
+        if PortfolioController.save_market_quote(
+            metal_ticker, selected_metal_name, "Commodity", m_price, m_chg
+        ):
+            st.success(f"✅ {selected_metal_name} guardado en TiDB.")
+        else:
+            st.error("❌ Error al guardar en TiDB.")
+
+
+@st.fragment
+def render_indices_column():
+    st.subheader("📊 Índices Bursátiles")
+    dict_indices = {
+        "Nasdaq Composite": "^IXIC",
+        "S&P 500": "^GSPC",
+        "Dow Jones Industrial": "^DJI",
+        "Russell 2000": "^RUT",
+        "FTSE 100 (UK)": "^FTSE",
+    }
+    selected_index_name = st.selectbox(
+        "Seleccione el Índice:", list(dict_indices.keys()), key="sel_index"
+    )
+    index_ticker = dict_indices[selected_index_name]
+
+    i_price, i_chg = get_ticker_snapshot(index_ticker)
+    st.metric(selected_index_name, f"{i_price:,.2f} pts", f"{i_chg:+.2f}%")
+
+    if st.button(f"💾 Guardar {selected_index_name}", key="save_index_btn"):
+        if PortfolioController.save_market_quote(
+            index_ticker, selected_index_name, "Index", i_price, i_chg
+        ):
+            st.success(f"✅ {selected_index_name} guardado en TiDB.")
+        else:
+            st.error("❌ Error al guardar en TiDB.")
+
+
+
+@st.fragment
+def render_stocks_column():
+    st.subheader("🏢 Acciones Wall Street")
+    dict_acciones = load_sp500_tickers()
+
+    selected_stock_label = st.selectbox(
+        f"Seleccione ({len(dict_acciones)} Acciones):",
+        options=list(dict_acciones.keys()),
+        key="sel_stock",
+    )
+    stock_ticker = dict_acciones[selected_stock_label]
+
+    s_price, s_chg = get_ticker_snapshot(stock_ticker)
+    display_name = selected_stock_label.split(" - ")[0]
+    st.metric(display_name, f"${s_price:,.2f}", f"{s_chg:+.2f}%")
+
+    if st.button(f"💾 Guardar {stock_ticker}", key="save_stock_btn"):
+        if PortfolioController.save_market_quote(
+            stock_ticker, selected_stock_label, "Equity", s_price, s_chg
+        ):
+            st.success(f"✅ {stock_ticker} guardado en TiDB.")
+        else:
+            st.error("❌ Error al guardar en TiDB.")
+
 
 def render():
     st.title("📈 Análisis de Mercados & Clases de Activos Globales")
@@ -85,6 +162,8 @@ def render():
     Consulta cotizaciones e históricos en tiempo real de **Acciones, Commodities (Oro) e Índices Tecnológicos**, 
     con opción de registrar el *snapshot* actual en la base de datos **TiDB Cloud**.
     """)
+
+
 
     col_m1, col_m2, col_m3 = st.columns(3)
 
