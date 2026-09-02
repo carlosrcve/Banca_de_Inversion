@@ -43,8 +43,11 @@ def get_db_credentials() -> dict:
 
 
 def get_db_connection():
+    """Establece conexión nativa con TiDB Cloud usando credenciales fijas y SSL."""
     try:
+        # Contexto SSL obligatorio para TiDB Cloud
         ssl_context = ssl.create_default_context()
+        
         connection = pymysql.connect(
             host="gateway01.us-east-1.prod.aws.tidbcloud.com",
             port=4000,
@@ -52,12 +55,11 @@ def get_db_connection():
             password="I1lVZQDq2d4KJbQA",
             database="valuations_db",
             ssl=ssl_context,
-            connect_timeout=10
+            connect_timeout=15
         )
         return connection
     except Exception as e:
-        # Esto te imprimirá en la terminal el motivo exacto (ej. Access denied, Timeout, etc.)
-        print(f"🔥 ERROR REAL DE PYMYSQL: {repr(e)}")
+        print(f"🔥 ERROR REAL DE CONEXIÓN EN dcf_controller.py: {repr(e)}")
         return None
 
 
