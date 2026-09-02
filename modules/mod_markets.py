@@ -275,7 +275,7 @@ def render():
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS (CON VELAS JAPONESAS)
+    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS (VELAS JAPONESAS)
     # -------------------------------------------------------------------------
     st.subheader("🔍 Buscador e Histórico de Activos Financieros")
 
@@ -300,9 +300,9 @@ def render():
             if not df_hist.empty:
                 curr_price, chg_pct = get_ticker_snapshot(symbol)
 
-                st.write(f"### Evolución del Precio: **{symbol}**")
+                st.write(f"### Evolución del Precio (Velas Japonesas): **{symbol}**")
 
-                # --- GRÁFICO DE VELAS JAPONESAS (PLOTLY) ---
+                # GRÁFICO DE VELAS CON PLOTLY
                 fig = go.Figure(
                     data=[
                         go.Candlestick(
@@ -312,29 +312,28 @@ def render():
                             low=df_hist["Low"],
                             close=df_hist["Close"],
                             name=symbol,
-                            increasing_line_color="#26a69a",  # Verde estilo TradingView
-                            decreasing_line_color="#ef5350",  # Rojo estilo TradingView
+                            increasing_line_color="#26a69a",
+                            decreasing_line_color="#ef5350",
                         )
                     ]
                 )
 
                 fig.update_layout(
-                    title=f"Gráfico Candlestick - {symbol}",
-                    yaxis_title="Precio (USD)",
-                    xaxis_title="Fecha",
+                    xaxis_rangeslider_visible=False,
                     template="plotly_dark",
-                    xaxis_rangeslider_visible=False,  # Desactiva la barra inferior para mayor limpieza
-                    margin=dict(l=20, r=20, t=40, b=20),
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    height=450,
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
 
-                # --- RESUMEN Y GUARDADO ---
                 col_sub1, col_sub2 = st.columns([3, 1])
                 with col_sub1:
                     st.subheader("📊 Resumen de Datos Históricos")
                     st.dataframe(
-                        df_hist[["Open", "High", "Low", "Close", "Volume"]].tail(10),
+                        df_hist[
+                            ["Open", "High", "Low", "Close", "Volume"]
+                        ].tail(10),
                         use_container_width=True,
                     )
 
