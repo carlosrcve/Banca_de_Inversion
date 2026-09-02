@@ -224,3 +224,15 @@ CREATE TABLE IF NOT EXISTS documentos_cloud (
     ruta_archivo TEXT NOT NULL,
     fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+USE valuations_db;
+CREATE TABLE IF NOT EXISTS market_quotes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    symbol VARCHAR(20) NOT NULL,
+    asset_name VARCHAR(100) NOT NULL,
+    asset_type VARCHAR(50) NOT NULL, -- 'Equity', 'Commodity', 'Index', 'Crypto', 'FX'
+    price DECIMAL(15, 4) NOT NULL,
+    change_percent DECIMAL(8, 4) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
