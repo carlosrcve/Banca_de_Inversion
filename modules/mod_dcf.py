@@ -196,46 +196,113 @@ def render():
         )
 
         # TAB 2
+        # =========================================================================
+        # PESTAÑA 2: RESULTADOS Y FCFF (DESDE MYSQL)
+        # =========================================================================
         with tab2:
-            st.header("📊 Resultados de Valoración y Tabla FCFF")
-            
-            # Consultar con dinámicos de empresa/escenario
+            st.header("📊 Resultados de Valoración desde MySQL")
+
             try:
                 engine = get_sqlalchemy_engine()
-                df_db_inputs = pd.read_sql("SELECT * FROM excel_inputs_raw WHERE company_name = %s AND scenario_name = %s", con=engine, params=(company_name, scenario_name))
+
+                # 1. Consultar parámetros/inputs guardados en MySQL para la empresa y escenario seleccionados
+                query_inputs = """
+                    SELECT * FROM excel_inputs_raw 
+                    WHERE company_name = %s AND scenario_name = %s
+                """
+                df_db_inputs = pd.read_sql(query_inputs, con=engine, params=(company_name, scenario_name))
+
+                # 2. Consultar proyecciones guardadas en MySQL
+                query_projs = """
+                    SELECT * FROM excel_projections_raw 
+                    WHERE company_name = %s AND scenario_name = %s
+                    ORDER BY id ASC
+                """
+                df_db_projs = pd.read_sql(query_projs, con=engine, params=(company_name, scenario_name))
+
+                if not df_db_inputs.empty and not df_db_projs.empty:
+                    # Mapear los inputs leídos de MySQL
+                    # (Asegúrate de ajustar los nombres de columna a como están guardados en tu tabla)
+                    inputs_dict = dict(zip(df_db_inputs["parametro"], df_db_inputs["valor"]))
+
+                    db_historical_revenue = float(inputs_dict.get("historical_revenue", historical_revenue))
+                    db_tax_rate = float(inputs_dict.get("tax_rate", tax_rate))
+                    db_capex = float(inputs_dict.get("capex_percent", capex_percent))
+                    db_nwc = float(inputs_dict.get("nwc_percent", nwc_percent))
+                    db_da = float(inputs_dict.get("da_percent", da_percent))
+                    db_wacc = float(inputs_dict.get("wacc", wacc))
+                    db_g = float(inputs_dict.get("terminal_growth_rate", terminal_growth_rate))
+                    db_debt = float(inputs_dict.get("net_debt", net_debt))
+
+                    db_growth_rates = [float(x) for x in df_db_projs["growth_rate"].tolist()]
+                    db_ebit_margins = [float(x) for x in df_db_projs["ebit_margin"].tolist()]
+
+                    # Recalcular la valoración usando estrictamente la data de MySQL
+                    results_db = DCFController.run_valuation(
+                        historical_revenue=db_historical_revenue,
+                        growth_rates=db_growth_rates,
+                        ebit_margins=db_ebit_margins,
+                        tax_rate=db_tax_rate,
+                        capex_percent=db_capex,
+                        nwc_percent=db_nwc,
+                        da_percent=db_da,
+                        wacc=db_wacc,
+                        terminal_growth_rate=db_g,
+                        net_debt=db_debt
+                    )
+
+                    # Mostrar Métricas desde MySQL
+                    col_res1, col_res2, col_res3 = st.columns(3)
+                    col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
+                    col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
+                    col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
+
+                    st.markdown("---")
+
+                    # Construir la tabla FCFF usando los datos traídos de MySQL
+                    df_projections = pd.DataFrame({
+                        "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
+                        "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
+                        "Margen EBIT (%)": [m * 100 for m in db_ebit_margins],
+                        "Ingresos Proyectados ($)": results_db.projected_revenues,
+                        "EBIT ($)": results_db.projected_ebit,
+                        "NOPAT ($)": results_db.projected_nopat,
+                        "Flujo Caja Libre (FCF) ($)": results_db.free_cash_flows,
+                        "PV FCF ($)": results_db.pv_cash_flows,
+                    })
+
+                    st.dataframe(df_projections.style.format({
+                        "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
+                        "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
+                        "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
+                    }), use_container_width=True)
+
+                    # Guardar en session_state para que la Pestaña 3 (Gráficos) use estos mismos datos
+                    st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
+
+                else:
+                    st.warning(f"⚠️ No se encontraron registros en MySQL para la empresa '{company_name}' y escenario '{scenario_name}'. Inserta los datos desde la Pestaña 1 o cambia los nombres en el menú lateral.")
+
             except Exception as db_err:
-                st.warning(f"⚠️ Nota sobre DB local/remota: {db_err}")
+                st.error(f"❌ Error al consultar la base de datos MySQL: {db_err}")
 
-            col_res1, col_res2, col_res3 = st.columns(3)
-            col_res1.metric("🏢 Enterprise Value (EV)", f"${results.enterprise_value:,.2f}")
-            col_res2.metric("💵 Equity Value (Patrimonio)", f"${results.equity_value:,.2f}")
-            col_res3.metric("🌐 Valor Presente TV", f"${results.pv_terminal_value:,.2f}")
 
-            st.markdown("---")
-            df_projections = pd.DataFrame({
-                "Año": [f"Año {i+1}" for i in range(len(growth_rates))],
-                "Tasa Crec. (%)": [g * 100 for g in growth_rates],
-                "Margen EBIT (%)": [m * 100 for m in ebit_margins],
-                "Ingresos Proyectados ($)": results.projected_revenues,
-                "EBIT ($)": results.projected_ebit,
-                "NOPAT ($)": results.projected_nopat,
-                "Flujo Caja Libre (FCF) ($)": results.free_cash_flows,
-                "PV FCF ($)": results.pv_cash_flows,
-            })
-            st.dataframe(df_projections.style.format({
-                "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
-                "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
-                "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
-            }), use_container_width=True)
-
-        # TAB 3
+        # =========================================================================
+        # PESTAÑA 3: GRÁFICOS (DINÁMICOS SEGÚN MYSQL)
+        # =========================================================================
         with tab3:
-            st.header("📈 Análisis Gráfico")
-            df_chart = pd.DataFrame({
-                "Año": [f"Año {i+1}" for i in range(len(results.pv_cash_flows))],
-                "PV FCF": [float(val) for val in results.pv_cash_flows],
-            }).set_index("Año")
-            st.bar_chart(df_chart)
+            st.header("📈 Análisis Gráfico (Basado en la DB)")
+            
+            pv_flows = st.session_state.get("active_pv_cash_flows", None)
+            if pv_flows:
+                df_chart = pd.DataFrame({
+                    "Año": [f"Año {i+1}" for i in range(len(pv_flows))],
+                    "PV FCF ($)": [float(val) for val in pv_flows],
+                }).set_index("Año")
+                
+                st.bar_chart(df_chart)
+            else:
+                st.info("Carga o consulta un escenario en la Pestaña 2 para visualizar el gráfico.")
 
         # TAB 4
         with tab4:
