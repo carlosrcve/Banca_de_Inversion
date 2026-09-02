@@ -1,4 +1,5 @@
 # portfolio_controller.py
+# portfolio_controller.py
 import os
 import sys
 
@@ -12,23 +13,31 @@ class PortfolioController:
 
     @staticmethod
     def save_market_quote(symbol, asset_name, asset_type, price, change_percent):
-        engine = get_sqlalchemy_engine()
-        query = text("""
-            INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
-            VALUES (:symbol, :asset_name, :asset_type, :price, :change_percent)
-        """)
+        """Guarda o actualiza una cotización de mercado usando conexión nativa."""
+        conn = get_db_connection()
+        if not conn:
+            return False
+
         try:
-            with engine.begin() as conn:  # engine.begin() maneja la transacción y hace el commit automático
-                conn.execute(query, {
-                    "symbol": symbol,
-                    "asset_name": asset_name,
-                    "asset_type": asset_type,
-                    "price": price,
-                    "change_percent": change_percent
-                })
+            cursor = conn.cursor()
+            query = """
+                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            cursor.execute(query, (symbol, asset_name, asset_type, price, change_percent))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
             return True
         except Exception as e:
             print(f"Error al guardar cotización: {e}")
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                conn.close()
             return False
 
     @staticmethod
