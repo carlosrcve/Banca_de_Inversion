@@ -162,7 +162,7 @@ def render():
         "📥 1. Cargar Excel a BD", 
         "📊 2. Resultados Desde MySQL", 
         "📈 3. Gráficos & Análisis", 
-        "💾 4. Base de Datos / Historial"
+        "💾 4. 📁 Gestor Documental"
     ])
 
     # -------------------------------------------------------------------------
@@ -527,7 +527,6 @@ def render():
         db_actual = st.session_state.get('DB_ACTUAL')
         if not db_actual or db_actual == 'none':
             st.warning("⚠️ Por favor, selecciona un Cliente/Empresa en la barra lateral o panel principal.")
-            st.stop()
 
         # Directorio base para almacenar los archivos por empresa
         DIRECTORIO_SUBIDAS = "documentos_clientes"
