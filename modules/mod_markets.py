@@ -82,18 +82,17 @@ def render_metals_column():
     st.metric(selected_metal_name, f"${m_price:,.2f}", f"{m_chg:+.2f}%")
 
     if st.button(f"💾 Guardar {selected_metal_name}", key="save_metal_btn"):
-    success, err_details = PortfolioController.save_market_quote(
-        symbol=metal_ticker,
-        asset_name=selected_metal_name,
-        asset_type="Commodity",
-        price=float(m_price),
-        change_percent=float(m_chg),
-    )
-    if success:
-        st.success(f"✅ {selected_metal_name} guardado en TiDB.")
-    else:
-        st.error(f"❌ Error al guardar en TiDB: {err_details}")
-
+        success, err_details = PortfolioController.save_market_quote(
+            symbol=metal_ticker,
+            asset_name=selected_metal_name,
+            asset_type="Commodity",
+            price=float(m_price),
+            change_percent=float(m_chg),
+        )
+        if success:
+            st.success(f"✅ {selected_metal_name} guardado en TiDB.")
+        else:
+            st.error(f"❌ Error al guardar en TiDB: {err_details}")
 
 @st.fragment
 def render_indices_column():
