@@ -108,39 +108,54 @@ def render():
             except Exception as e:
                 st.error(f"❌ Error al procesar Excel: {e}")
 
-        if st.session_state.get("df_excel_inputs") is not None or st.session_state.get("df_excel_projs") is not None:
-            st.markdown("---")
-            # En Tab 1: Al hacer click en "Insertar Data Cruda de Excel en MySQL"
-            if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
-                try:
-                    engine = get_sqlalchemy_engine()
+            if st.session_state.get("df_excel_inputs") is not None or st.session_state.get("df_excel_projs") is not None:
+                st.markdown("---")
+                if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
+                    try:
+                        engine = get_sqlalchemy_engine()
 
-                    if st.session_state.df_excel_projs is not None:
-                        df_proj = st.session_state.df_excel_projs.copy()
-                        
-                        # Normalizar columnas del DataFrame subido antes de guardar
-                        # Asumiendo que las dos primeras columnas del Excel son Tasa Crecimiento y Margen EBIT
-                        df_proj.columns = [str(c).strip().lower() for c in df_proj.columns]
-                        
-                        # Mapear explícitamente a las columnas esperadas por la DB
-                        df_to_save = pd.DataFrame()
-                        df_to_save["company_name"] = [company_name] * len(df_proj)
-                        df_to_save["scenario_name"] = [scenario_name] * len(df_proj)
-                        df_to_save["year"] = range(1, len(df_proj) + 1)
-                        
-                        # Asignar valores buscando por posición o nombre
-                        col_g = next((c for c in df_proj.columns if "growth" in c or "crec" in c), df_proj.columns[0])
-                        col_m = next((c for c in df_proj.columns if "ebit" in c or "marg" in c), df_proj.columns[1] if len(df_proj.columns) > 1 else df_proj.columns[0])
-                        
-                        df_to_save["growth_rate"] = df_proj[col_g]
-                        df_to_save["ebit_margin"] = df_proj[col_m]
+                        # 1. Obtener company_name y scenario_name desde st.session_state
+                        company_name = st.session_state.get("company_name", default_company)
+                        scenario_name = st.session_state.get("scenario_name", default_scenario)
 
-                        # Reemplazar los datos viejos de ese escenario para limpiar la estructura errónea
-                        df_to_save.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
-                        st.success("✅ ¡Proyecciones guardadas con la estructura correcta en MySQL!")
+                        # 2. Guardar INPUTS en MySQL (respetando la tabla DDL: Parametro, Valor)
+                        if st.session_state.get("df_excel_inputs") is not None:
+                            df_in = st.session_state.df_excel_inputs.copy()
+                            
+                            param_col_in = next((c for c in df_in.columns if clean_column_name(c) in ["parametro", "parametros", "variable", "concept", "concepto", "key"]), df_in.columns[0])
+                            val_col_in = next((c for c in df_in.columns if clean_column_name(c) in ["valor", "valores", "value", "monto", "monto_mensual"]), df_in.columns[1] if len(df_in.columns) > 1 else df_in.columns[0])
 
-                except Exception as err:
-                    st.error(f"❌ Error al guardar en MySQL: {err}")
+                            df_in_to_save = pd.DataFrame({
+                                "company_name": [company_name] * len(df_in),
+                                "scenario_name": [scenario_name] * len(df_in),
+                                "Parametro": df_in[param_col_in].astype(str),
+                                "Valor": df_in[val_col_in].astype(str)
+                            })
+                            
+                            df_in_to_save.to_sql("excel_inputs_raw", con=engine, if_exists="append", index=False)
+
+                        # 3. Guardar PROYECCIONES en MySQL (respetando la tabla DDL: year, growth_rate, ebit_margin)
+                        if st.session_state.get("df_excel_projs") is not None:
+                            df_proj = st.session_state.df_excel_projs.copy()
+                            df_proj.columns = [str(c).strip().lower() for c in df_proj.columns]
+                            
+                            col_g = next((c for c in df_proj.columns if "growth" in c or "crec" in c), df_proj.columns[0])
+                            col_m = next((c for c in df_proj.columns if "ebit" in c or "marg" in c), df_proj.columns[1] if len(df_proj.columns) > 1 else df_proj.columns[0])
+                            
+                            df_to_save = pd.DataFrame({
+                                "company_name": [company_name] * len(df_proj),
+                                "scenario_name": [scenario_name] * len(df_proj),
+                                "year": range(1, len(df_proj) + 1),
+                                "growth_rate": pd.to_numeric(df_proj[col_g], errors='coerce'),
+                                "ebit_margin": pd.to_numeric(df_proj[col_m], errors='coerce')
+                            })
+
+                            df_to_save.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
+                            
+                        st.success("✅ ¡Inputs y Proyecciones guardados exitosamente en MySQL!")
+
+                    except Exception as err:
+                        st.error(f"❌ Error al guardar en MySQL: {err}")
 
     # -------------------------------------------------------------------------
     # CONTROLES SIDEBAR
