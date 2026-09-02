@@ -141,46 +141,52 @@ def render():
                     # CASO 2: ARCHIVO DIRECTO DE `dcf_projections.xlsx`
                     # =========================================================================
                     elif "year_index" in df_first_sheet.columns and ("valuation_id" in df_first_sheet.columns or "analysis_id" in df_first_sheet.columns):
-                        st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura directa de **dcf_projections** ({len(df_first_sheet)} registros).")
+                        st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura de **dcf_projections** ({len(df_first_sheet)} registros).")
                         
-                        # 1. Normalizar columna clave a 'analysis_id' para MySQL
+                        # 1. Normalizar nombre de la columna a 'analysis_id'
                         if "valuation_id" in df_first_sheet.columns:
                             df_first_sheet = df_first_sheet.rename(columns={"valuation_id": "analysis_id"})
 
-                        # 2. Consultar IDs existentes en la tabla PADRE (dcf_analyses)
+                        # 2. Obtener los IDs reales disponibles en la tabla padre (dcf_analyses)
                         try:
-                            existing_ids = pd.read_sql("SELECT DISTINCT analysis_id FROM dcf_analyses", con=engine)["analysis_id"].tolist()
+                            existing_ids = pd.read_sql("SELECT DISTINCT analysis_id FROM dcf_analyses ORDER BY analysis_id DESC", con=engine)["analysis_id"].tolist()
                         except Exception as e:
                             existing_ids = []
-                            st.warning(f"⚠️ No se pudo consultar la tabla `dcf_analyses`: {e}")
+                            st.error(f"❌ Error consultando `dcf_analyses`: {e}")
 
-                        # 3. Verificar si el analysis_id del Excel existe en la base de datos
-                        excel_analysis_ids = df_first_sheet["analysis_id"].dropna().unique().tolist()
-                        missing_ids = [aid for aid in excel_analysis_ids if aid not in existing_ids]
-
-                        if missing_ids:
-                            st.error(
-                                f"❌ **Error de Clave Foránea (FK):** El archivo contiene `analysis_id` **{missing_ids}** que no existen en la tabla `dcf_analyses`.\n\n"
-                                f"📌 **Cómo solucionarlo:**\n"
-                                f"1. Primero debes subir/insertar el análisis principal en `dcf_analyses` (Caso 1 o Caso 3).\n"
-                                f"2. O edita tu archivo Excel para que el campo `analysis_id` coincida con uno existente en la BD (IDs válidos actuales: `{existing_ids}`)."
-                            )
+                        if not existing_ids:
+                            st.error("❌ No hay ningún registro en `dcf_analyses`. Debes insertar primero la tabla padre.")
                         else:
-                            # 4. Inserción segura en MySQL
+                            st.subheader("🔗 Redirección de Análisis Padre")
+                            
+                            # 3. Selector para elegir a qué analysis_id de la BD pertenecen estas proyecciones
+                            selected_parent_id = st.selectbox(
+                                "Selecciona el ID real de dcf_analyses al que pertenecen estas proyecciones:",
+                                options=existing_ids,
+                                help="Selecciona el ID generado recientemente en la primera tabla para vincular estas proyecciones."
+                            )
+                            
+                            # Reemplazar el ID original del Excel por el ID real seleccionado en MySQL
+                            df_first_sheet["analysis_id"] = selected_parent_id
+                            
+                            st.caption(f"📌 Se asociarán los {len(df_first_sheet)} registros al `analysis_id`: **{selected_parent_id}**")
+
+                            # 4. Inserción a la BD
                             if st.button(f"🚀 Insertar {uploaded_file.name} en `dcf_projections`", key=f"btn_proj_{uploaded_file.name}"):
                                 try:
-                                    # Omitir clave primaria autoincremental 'id' y fecha de creación si vienen en el Excel
+                                    # Omitir columnas autogeneradas
                                     df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
                                     
+                                    # Insertar
                                     df_to_insert.to_sql(
                                         name="dcf_projections", 
                                         con=engine, 
                                         if_exists="append", 
                                         index=False
                                     )
-                                    st.success(f"✅ Se insertaron {len(df_to_insert)} proyecciones exitosamente en `dcf_projections`.")
+                                    st.success(f"✅ Se insertaron exitosamente {len(df_to_insert)} registros en `dcf_projections` vinculados al `analysis_id = {selected_parent_id}`.")
                                 except Exception as e:
-                                    st.error(f"❌ Error al insertar en dcf_projections: {e}")
+                                    st.error(f"❌ Error al insertar en `dcf_projections`: {e}")
 
                     # =========================================================================
                     # CASO 3: ARCHIVO MODELO INTERNO (HOJAS "Inputs" Y "Projections")
