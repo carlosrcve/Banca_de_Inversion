@@ -201,42 +201,37 @@ def render():
         )
 
         # TAB 2
-        # =========================================================================
-        # PESTAÑA 2: RESULTADOS Y FCFF (DESDE MYSQL)
-        # =========================================================================
-        # En Tab 2:
         with tab2:
             st.header("📊 Resultados de Valoración (Leídos desde MySQL)")
 
             try:
                 engine = get_sqlalchemy_engine()
 
-                # 1. Leer Inputs desde tu tabla excel_inputs_raw
+                # 1. Leer Inputs omitiendo 'ORDER BY id'
                 query_inputs = """
                     SELECT Parametro, Valor 
                     FROM excel_inputs_raw 
                     WHERE company_name = %s AND scenario_name = %s
-                    ORDER BY id ASC
                 """
                 df_db_inputs = pd.read_sql(query_inputs, con=engine, params=(company_name, scenario_name))
 
-                # 2. Leer Proyecciones desde tu tabla excel_projections_raw
+                # 2. Leer Proyecciones ordenando por 'year' en lugar de 'id'
                 query_projs = """
                     SELECT year, growth_rate, ebit_margin 
                     FROM excel_projections_raw 
                     WHERE company_name = %s AND scenario_name = %s
-                    ORDER BY id ASC
+                    ORDER BY year ASC
                 """
                 df_db_projs = pd.read_sql(query_projs, con=engine, params=(company_name, scenario_name))
 
                 if not df_db_inputs.empty and not df_db_projs.empty:
-                    # Crear diccionario con mayúsculas/minúsculas tolerantes
+                    # Crear diccionario limpio de inputs
                     inputs_dict = dict(zip(
                         df_db_inputs["Parametro"].astype(str).str.strip(), 
                         df_db_inputs["Valor"]
                     ))
 
-                    # Extraer valores de los inputs guardados
+                    # Extraer valores para el cálculo
                     db_historical_revenue = float(inputs_dict.get("historical_revenue", historical_revenue))
                     db_tax_rate = float(inputs_dict.get("tax_rate", tax_rate))
                     db_capex = float(inputs_dict.get("capex_percent", capex_percent))
@@ -246,11 +241,10 @@ def render():
                     db_g = float(inputs_dict.get("terminal_growth_rate", terminal_growth_rate))
                     db_debt = float(inputs_dict.get("net_debt", net_debt))
 
-                    # Extraer proyecciones guardadas
                     db_growth_rates = [float(x) for x in df_db_projs["growth_rate"].tolist()]
                     db_ebit_margins = [float(x) for x in df_db_projs["ebit_margin"].tolist()]
 
-                    # Ejecutar DCF usando 100% los datos de MySQL
+                    # Ejecutar modelo DCF
                     results_db = DCFController.run_valuation(
                         historical_revenue=db_historical_revenue,
                         growth_rates=db_growth_rates,
@@ -264,7 +258,7 @@ def render():
                         net_debt=db_debt
                     )
 
-                    # Renderizar métricas
+                    # Métricas
                     col_res1, col_res2, col_res3 = st.columns(3)
                     col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
                     col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
@@ -272,7 +266,7 @@ def render():
 
                     st.markdown("---")
 
-                    # Construir tabla FCFF dinámicamente desde MySQL
+                    # Tabla FCFF
                     df_projections = pd.DataFrame({
                         "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
                         "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
@@ -290,11 +284,11 @@ def render():
                         "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
                     }), use_container_width=True)
 
-                    # Guardar la serie para el gráfico de la Pestaña 3
+                    # Actualizar gráfico para la Pestaña 3
                     st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
 
                 else:
-                    st.warning(f"⚠️ No hay datos guardados en MySQL para '{company_name}' / '{scenario_name}'.")
+                    st.warning(f"⚠️ No se encontraron registros en MySQL para '{company_name}' / '{scenario_name}'.")
 
             except Exception as db_err:
                 st.error(f"❌ Error al consultar MySQL: {db_err}")
