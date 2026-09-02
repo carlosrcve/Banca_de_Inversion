@@ -420,6 +420,7 @@ def render():
                     db_wacc = parse_db_val(inputs_dict.get("wacc"), 0.10)
                     db_g = parse_db_val(inputs_dict.get("terminal_growth_rate"), 0.025)
                     db_debt = parse_db_val(inputs_dict.get("net_debt"), 0.0)
+                    db_shares = parse_db_val(inputs_dict.get("shares_outstanding"), 0.0)
 
                     if db_wacc > 1.0: db_wacc /= 100.0
                     if db_g > 1.0: db_g /= 100.0
@@ -496,6 +497,56 @@ def render():
                         }), use_container_width=True)
 
                         st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
+
+                        # -------------------------------------------------------------------------
+                        # MATRIZ DE SENSIBILIDAD (WACC vs. g)
+                        # -------------------------------------------------------------------------
+                        st.markdown("---")
+                        st.subheader("🎯 Matriz de Sensibilidad (Valor del Patrimonio / Acción)")
+                        st.caption("Evaluación de impacto sobre el Equity Value variando el WACC y la Tasa de Crecimiento Terminal ($g$):")
+
+                        def generar_matriz_sensibilidad(fcf_proyectados, net_debt, shares_outstanding, base_wacc, base_g):
+                            wacc_range = [base_wacc - 0.02, base_wacc - 0.01, base_wacc, base_wacc + 0.01, base_wacc + 0.02]
+                            g_range = [base_g - 0.01, base_g - 0.005, base_g, base_g + 0.005, base_g + 0.01]
+                            
+                            matrix_data = []
+                            for w in wacc_range:
+                                row = []
+                                for g in g_range:
+                                    if w <= g:
+                                        row.append(np.nan)
+                                        continue
+                                    
+                                    pv_fcf = sum([fcf / ((1 + w) ** i) for i, fcf in enumerate(fcf_proyectados, 1)])
+                                    tv = (fcf_proyectados[-1] * (1 + g)) / (w - g)
+                                    pv_tv = tv / ((1 + w) ** len(fcf_proyectados))
+                                    
+                                    ev = pv_fcf + pv_tv
+                                    equity_value = ev - net_debt
+                                    val_final = equity_value / shares_outstanding if shares_outstanding > 0 else equity_value
+                                    
+                                    row.append(round(val_final, 2))
+                                matrix_data.append(row)
+                            
+                            df_sens = pd.DataFrame(
+                                matrix_data,
+                                index=[f"WACC {w*100:.1f}%" for w in wacc_range],
+                                columns=[f"g {g*100:.1f}%" for g in g_range]
+                            )
+                            return df_sens
+
+                        df_matriz = generar_matriz_sensibilidad(
+                            fcf_proyectados=results_db.free_cash_flows,
+                            net_debt=db_debt,
+                            shares_outstanding=db_shares,
+                            base_wacc=db_wacc,
+                            base_g=db_g
+                        )
+
+                        st.dataframe(
+                            df_matriz.style.background_gradient(cmap="RdYlGn", axis=None).highlight_null(color="gray").format("${:,.2f}", na_rep="N/A"),
+                            use_container_width=True
+                        )
 
                 else:
                     st.warning(f"⚠️ No hay datos guardados en las tablas raw para '{company_name}' / '{scenario_name}'. Ve a la Pestaña 1 e insértalos en MySQL.")
