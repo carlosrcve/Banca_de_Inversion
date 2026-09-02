@@ -11,59 +11,25 @@ from dcf_controller import get_db_connection
 class PortfolioController:
 
     @staticmethod
-    def save_market_quote(
-        symbol: str,
-        asset_name: str,
-        asset_type: str,
-        price: float,
-        change_percent: float,
-        currency: str = "USD",
-    ) -> tuple[bool, str]:
-        conn = get_db_connection()
-        if not conn:
-            return False, "Error: get_db_connection() devolvió None."
-
+    def save_market_quote(symbol, asset_name, asset_type, price, change_percent):
+        engine = get_sqlalchemy_engine()
+        query = text("""
+            INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
+            VALUES (:symbol, :asset_name, :asset_type, :price, :change_percent)
+        """)
         try:
-            cursor = conn.cursor()
-            
-            # ---> DIAGNÓSTICO DE CONEXIÓN REAL <---
-            cursor.execute("SELECT DATABASE(), @@hostname;")
-            db_info = cursor.fetchone()
-            print(f"--> PYTHON ESCRIBIENDO EN BD: {db_info}")
-            # ---------------------------------------
-
-            query = text("""
-                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent)
-                VALUES (:symbol, :asset_name, :asset_type, :price, :currency, :change_percent)
-            """)
-            cursor.execute(
-                query,
-                (
-                    symbol,
-                    asset_name,
-                    asset_type,
-                    price,
-                    currency,
-                    change_percent,
-                ),
-            )
-            conn.commit()
-            
-            # Verificar si realmente se afectó una fila
-            rows_inserted = cursor.rowcount
-            cursor.close()
-            conn.close()
-            
-            return True, f"Guardado OK. Filas afectadas: {rows_inserted}. BD: {db_info}"
-            
+            with engine.begin() as conn:  # engine.begin() maneja la transacción y hace el commit automático
+                conn.execute(query, {
+                    "symbol": symbol,
+                    "asset_name": asset_name,
+                    "asset_type": asset_type,
+                    "price": price,
+                    "change_percent": change_percent
+                })
+            return True
         except Exception as e:
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-                conn.close()
-            return False, f"EXCEPCIÓN MYSQL: {str(e)}"
+            print(f"Error al guardar cotización: {e}")
+            return False
 
     @staticmethod
     def create_portfolio(
