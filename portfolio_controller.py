@@ -25,6 +25,13 @@ class PortfolioController:
 
         try:
             cursor = conn.cursor()
+            
+            # ---> DIAGNÓSTICO DE CONEXIÓN REAL <---
+            cursor.execute("SELECT DATABASE(), @@hostname;")
+            db_info = cursor.fetchone()
+            print(f"--> PYTHON ESCRIBIENDO EN BD: {db_info}")
+            # ---------------------------------------
+
             query = """
                 INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent, recorded_at)
                 VALUES (%s, %s, %s, %s, %s, %s, NOW())
@@ -41,9 +48,14 @@ class PortfolioController:
                 ),
             )
             conn.commit()
+            
+            # Verificar si realmente se afectó una fila
+            rows_inserted = cursor.rowcount
             cursor.close()
             conn.close()
-            return True, "Guardado con éxito."
+            
+            return True, f"Guardado OK. Filas afectadas: {rows_inserted}. BD: {db_info}"
+            
         except Exception as e:
             if conn:
                 try:
@@ -51,7 +63,6 @@ class PortfolioController:
                 except Exception:
                     pass
                 conn.close()
-            # ESTO MOSTRARÁ EL ERROR REAL EN STREAMLIT
             return False, f"EXCEPCIÓN MYSQL: {str(e)}"
 
     @staticmethod
