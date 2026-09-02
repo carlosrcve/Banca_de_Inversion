@@ -435,9 +435,14 @@ def render():
                     db_growth_rates = [x / 100.0 if x > 1.0 else x for x in db_growth_rates]
                     db_ebit_margins = [x / 100.0 if x > 1.0 else x for x in db_ebit_margins]
 
+                    # -------------------------------------------------------------------------
+                    # VALIDACIÓN WACC > g
+                    # -------------------------------------------------------------------------
                     if db_wacc <= db_g:
-                        st.error(f"🚨 **WACC ({db_wacc:.2%}) debe ser mayor que g ({db_g:.2%}).** Revisa la base de datos.")
+                        st.error(f"🚨 **Validación Fallida: WACC ({db_wacc:.2%}) debe ser mayor que g ({db_g:.2%}).** No es posible calcular la perpetuidad ni la Matriz de Sensibilidad hasta corregir las premisas en la base de datos.")
                     else:
+                        st.success(f"✅ **Validación Exitosa:** WACC ({db_wacc:.2%}) > g ({db_g:.2%})")
+
                         results_db = DCFController.run_valuation(
                             historical_revenue=db_historical_revenue,
                             growth_rates=db_growth_rates,
