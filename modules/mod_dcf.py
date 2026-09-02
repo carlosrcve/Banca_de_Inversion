@@ -176,6 +176,9 @@ def render():
     # -------------------------------------------------------------------------
     # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PARSER ROBUSTO)
     # -------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PARSER ROBUSTO Y DIAGNÓSTICO)
+    # -------------------------------------------------------------------------
     with tab2:
         st.header("📊 Resultados de Valoración (Exclusivo desde MySQL)")
 
@@ -200,7 +203,6 @@ def render():
             df_db_projs = pd.read_sql(query_projs, con=engine, params={"company": company_name, "scenario": scenario_name})
 
             if not df_db_inputs.empty and not df_db_projs.empty:
-                # Función para limpiar cualquier string con %, $ o comas guardado en MySQL
                 def parse_db_val(val, default=0.0):
                     if pd.isna(val) or val is None:
                         return float(default)
@@ -215,13 +217,11 @@ def render():
                     except ValueError:
                         return float(default)
 
-                # Mapeo normalizando nombres de parámetros (snake_case)
                 inputs_dict = {
                     clean_column_name(k): v 
                     for k, v in zip(df_db_inputs["Parametro"], df_db_inputs["Valor"])
                 }
 
-                # Lectura de parámetros desde la BD con fallbacks financieros válidos
                 db_historical_revenue = parse_db_val(inputs_dict.get("historical_revenue"), 1000000.0)
                 db_tax_rate = parse_db_val(inputs_dict.get("tax_rate"), 0.25)
                 db_capex = parse_db_val(inputs_dict.get("capex_percent"), 0.04)
@@ -232,7 +232,6 @@ def render():
                 db_g = parse_db_val(inputs_dict.get("terminal_growth_rate"), 0.025)
                 db_debt = parse_db_val(inputs_dict.get("net_debt"), 0.0)
 
-                # Ajustar decimales si fueron guardados como enteros (ej. 10 en vez de 0.10)
                 if db_wacc > 1.0: db_wacc /= 100.0
                 if db_g > 1.0: db_g /= 100.0
                 if db_tax_rate > 1.0: db_tax_rate /= 100.0
@@ -240,14 +239,12 @@ def render():
                 if db_nwc > 1.0: db_nwc /= 100.0
                 if db_da > 1.0: db_da /= 100.0
 
-                # Procesar tasas de proyecciones
                 db_growth_rates = [parse_db_val(x, 0.05) for x in df_db_projs["growth_rate"]]
                 db_ebit_margins = [parse_db_val(x, 0.15) for x in df_db_projs["ebit_margin"]]
 
                 db_growth_rates = [x / 100.0 if x > 1.0 else x for x in db_growth_rates]
                 db_ebit_margins = [x / 100.0 if x > 1.0 else x for x in db_ebit_margins]
 
-                # Validación contra división por cero
                 if db_wacc <= db_g:
                     st.error(f"🚨 **WACC ({db_wacc:.2%}) debe ser mayor que g ({db_g:.2%}).** Revisa la base de datos.")
                 else:
@@ -264,13 +261,13 @@ def render():
                         net_debt=db_debt
                     )
 
-                    # --- MÉTRICAS DE VALORACIÓN ---
+                    # --- TARJETAS MÉTRICAS ---
                     col_res1, col_res2, col_res3 = st.columns(3)
                     col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
                     col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
                     col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
 
-                    # --- BLOQUE DE ANÁLISIS FINANCIERO Y ESTRUCTURA DE VALOR ---
+                    # --- BLOQUE EXPLICATIVO PARA EL CLIENTE FINAL ---
                     pv_tv = results_db.pv_terminal_value
                     ev = results_db.enterprise_value
                     tv_weight = (pv_tv / ev * 100) if ev > 0 else 0
@@ -278,16 +275,17 @@ def render():
                     fcf_weight = 100 - tv_weight
 
                     st.info(f"""
-                    💡 **Análisis de Valoración y Estructura Financiera:**
+                    📝 **Interpretación Financiera de la Valoración para el Cliente:**
                     
-                    * **Concentración del Valor:** El **{tv_weight:.2f}%** del Enterprise Value (${ev:,.2f}) proviene del **Valor Terminal Descontado** (${pv_tv:,.2f}), mientras que los Flujos de Caja Libres explícitos proyectados representan el **{fcf_weight:.2f}%** restante (${pv_fcf_sum:,.2f}).
-                    * **Sensibilidad del Modelo:** Al depender fuertemente de la perpetuidad, la valoración es altamente sensible a variaciones en la tasa de descuento (**WACC: {db_wacc:.2%}**) y el crecimiento perpetuo (**g: {db_g:.2%}**).
-                    * **Estructura de Capital:** La coincidencia exacta o cercana entre el Enterprise Value y el Equity Value (${results_db.equity_value:,.2f}) indica una postura de **Deuda Neta neutral/baja** (${db_debt:,.2f}), trasladando la totalidad del valor operativo al patrimonio de los accionistas.
+                    * **🏢 Enterprise Value (Valor Operativo) — ${ev:,.2f}:** Es el valor total de la operación del negocio. Representa cuánto vale la empresa independientemente de cómo esté financiada.
+                    * **💵 Equity Value (Valor para los Accionistas) — ${results_db.equity_value:,.2f}:** Es el valor neto que le pertenece a los dueños/accionistas. Al ser idéntico al EV, indica que la empresa no tiene deuda neta pendiente afectando el patrimonio.
+                    * **🌐 Valor Presente Terminal (PV TV) — ${pv_tv:,.2f}:** Representa el valor de todos los flujos de caja a perpetuidad más allá del periodo explícito. Constituye el **{tv_weight:.2f}%** del valor total de la compañía, mientras que los flujos explícitos aportan el **{fcf_weight:.2f}%** restante (${pv_fcf_sum:,.2f}).
+                    * **📌 Conclusión Ejecutiva:** La valoración está fuertemente impulsada por la capacidad de generación de valor a largo plazo (Tasa de Descuento WACC: **{db_wacc:.2%}**, Crecimiento Perpetuo g: **{db_g:.2%}**).
                     """)
 
                     st.markdown("---")
 
-                    # --- TABLA COMPLETA DE PROYECCIONES ---
+                    # --- TABLA COMPLETA ---
                     df_projections = pd.DataFrame({
                         "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
                         "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
