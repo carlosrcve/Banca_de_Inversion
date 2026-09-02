@@ -4,6 +4,50 @@ import yfinance as yf
 from portfolio_controller import PortfolioController
 
 
+
+# -------------------------------------------------------------------------
+# FUNCIÓN EN CACHÉ PARA CARGAR LAS ACCIONES DEL S&P 500 DINÁMICAMENTE
+# -------------------------------------------------------------------------
+@st.cache_data(ttl=86400)  # Guarda la lista en caché durante 24 horas
+def load_sp500_tickers():
+    """Descarga la lista actualizada del S&P 500 desde Wikipedia."""
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        tables = pd.read_html(url)
+        df_sp500 = tables[0]
+        
+        # Crear diccionario { "Símbolo - Nombre": "Ticker" }
+        dict_sp500 = {}
+        for _, row in df_sp500.iterrows():
+            symbol = str(row["Symbol"]).replace(".", "-")  # Ajustar símbolos estilo BRK.B -> BRK-B
+            name = row["Security"]
+            dict_sp500[f"{symbol} - {name}"] = symbol
+            
+        return dict_sp500
+    except Exception as e:
+        # Respaldo (Fallback) con las acciones más importantes si no hay internet o falla el scraping
+        return {
+            "AAPL - Apple Inc.": "AAPL",
+            "NVDA - NVIDIA Corp.": "NVDA",
+            "MSFT - Microsoft Corp.": "MSFT",
+            "AMZN - Amazon.com Inc.": "AMZN",
+            "GOOGL - Alphabet Inc.": "GOOGL",
+            "META - Meta Platforms": "META",
+            "TSLA - Tesla Inc.": "TSLA",
+            "BRK-B - Berkshire Hathaway": "BRK-B",
+            "JPM - JPMorgan Chase & Co.": "JPM",
+            "V - Visa Inc.": "V",
+            "UNH - UnitedHealth Group": "UNH",
+            "XOM - Exxon Mobil Corp.": "XOM",
+            "JNJ - Johnson & Johnson": "JNJ",
+            "PG - Procter & Gamble": "PG",
+            "HD - Home Depot": "HD",
+            "MA - Mastercard Inc.": "MA",
+            "NFLX - Netflix Inc.": "NFLX",
+            "AMD - Advanced Micro Devices": "AMD",
+            "BAC - Bank of America": "BAC",
+            "DIS - Walt Disney Co.": "DIS"
+        }
 def get_ticker_snapshot(symbol: str):
     """Función auxiliar para obtener precio y cambio porcentual de forma segura."""
     try:
@@ -101,34 +145,31 @@ def render():
                 st.error("❌ Error al guardar en TiDB.")
 
     # -------------------------------------------------------------------------
-    # 3. CATEGORÍA ACCIONES DE WALL STREET
+    # 3. CATEGORÍA ACCIONES DE WALL STREET (DINÁMICO CON S&P 500)
     # -------------------------------------------------------------------------
     with col_m3:
         st.subheader("🏢 Acciones Wall Street")
-        dict_acciones = {
-            "Apple Inc. (AAPL)": "AAPL",
-            "NVIDIA Corp. (NVDA)": "NVDA",
-            "Microsoft Corp. (MSFT)": "MSFT",
-            "Tesla Inc. (TSLA)": "TSLA",
-            "Amazon.com (AMZN)": "AMZN",
-            "Alphabet / Google (GOOGL)": "GOOGL",
-            "Meta Platforms (META)": "META",
-        }
-        selected_stock_name = st.selectbox(
-            "Seleccione la Acción:", list(dict_acciones.keys()), key="sel_stock"
+        
+        # Cargar diccionario de acciones
+        dict_acciones = load_sp500_tickers()
+        
+        selected_stock_label = st.selectbox(
+            f"Seleccione entre {len(dict_acciones)} Acciones:",
+            options=list(dict_acciones.keys()),
+            key="sel_stock"
         )
-        stock_ticker = dict_acciones[selected_stock_name]
+        stock_ticker = dict_acciones[selected_stock_label]
 
         s_price, s_chg = get_ticker_snapshot(stock_ticker)
-        st.metric(selected_stock_name, f"${s_price:,.2f}", f"{s_chg:+.2f}%")
+        st.metric(selected_stock_label.split(" - ")[0], f"${s_price:,.2f}", f"{s_chg:+.2f}%")
 
         if st.button(f"💾 Guardar {stock_ticker}", key="save_stock_btn"):
             if PortfolioController.save_market_quote(
-                stock_ticker, selected_stock_name, "Equity", s_price, s_chg
+                stock_ticker, selected_stock_label, "Equity", s_price, s_chg
             ):
-                st.success(f"✅ {selected_stock_name} guardado en TiDB.")
+                st.success(f"✅ {stock_ticker} guardado en TiDB Cloud.")
             else:
-                st.error("❌ Error al guardar en TiDB.")
+                st.error("❌ Error al guardar en TiDB Cloud.")
 
     st.markdown("---")
 
