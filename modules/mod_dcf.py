@@ -959,19 +959,33 @@ def render():
                         df_inputs = pd.read_sql(query_inputs, con=engine, params={"company": sel_company, "scenario": sel_scenario})
 
                         # Consulta de Flujos Descontados Proyectados
+                        # ---------------------------------------------------------
+                        # Consulta de Flujos Descontados Proyectados (Actualizado)
+                        # ---------------------------------------------------------
                         query_projections = text("""
-                            SELECT Anio, FCF_Descontado 
+                            SELECT * 
                             FROM excel_projections_raw 
                             WHERE company_name = :company AND scenario_name = :scenario
-                            ORDER BY Anio ASC
                         """)
                         df_proj = pd.read_sql(query_projections, con=engine, params={"company": sel_company, "scenario": sel_scenario})
 
-                        if df_inputs.empty:
-                            st.warning("⚠️ No se encontraron premisas registradas para este escenario.")
-                        else:
-                            # Mapeo y Parseo de variables
-                            inputs_dict = {clean_column_name(k): v for k, v in zip(df_inputs["Parametro"], df_inputs["Valor"])}
+                        # Extraer la lista de flujos descontados de forma dinámica
+                        pv_fcf_list = []
+                        if not df_proj.empty:
+                            # 1. Buscar la columna 'FCF_Descontado' (case-insensitive) o similares
+                            target_col = None
+                            for col in df_proj.columns:
+                                if col.lower() in ["fcf_descontado", "fcf_descontados", "pv_fcf", "flujo_descontado"]:
+                                    target_col = col
+                                    break
+                            
+                            # 2. Si encuentra la columna, parsear los valores
+                            if target_col:
+                                pv_fcf_list = pd.to_numeric(df_proj[target_col], errors="coerce").dropna().tolist()
+
+                        # 3. Fallback: Si la consulta no trae datos o la columna no existe, usar session_state
+                        if not pv_fcf_list:
+                            pv_fcf_list = st.session_state.get("active_pv_cash_flows", [0.0])
 
                             def parse_val(val, default=0.0):
                                 if pd.isna(val) or val is None: return float(default)
