@@ -14,14 +14,14 @@ def load_sp500_tickers():
         url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
         tables = pd.read_html(url)
         df_sp500 = tables[0]
-        
+
         # Crear diccionario { "Símbolo - Nombre": "Ticker" }
         dict_sp500 = {}
         for _, row in df_sp500.iterrows():
             symbol = str(row["Symbol"]).replace(".", "-")  # Ajustar símbolos estilo BRK.B -> BRK-B
             name = row["Security"]
             dict_sp500[f"{symbol} - {name}"] = symbol
-            
+
         return dict_sp500
     except Exception as e:
         # Respaldo (Fallback) con las acciones más importantes si no hay internet o falla el scraping
@@ -45,9 +45,13 @@ def load_sp500_tickers():
             "NFLX - Netflix Inc.": "NFLX",
             "AMD - Advanced Micro Devices": "AMD",
             "BAC - Bank of America": "BAC",
-            "DIS - Walt Disney Co.": "DIS"
+            "DIS - Walt Disney Co.": "DIS",
         }
 
+
+# -------------------------------------------------------------------------
+# FUNCIÓN EN CACHÉ PARA OBTENER COTIZACIONES
+# -------------------------------------------------------------------------
 @st.cache_data(ttl=120, show_spinner=False)
 def get_ticker_snapshot(symbol: str):
     """Obtiene de forma segura el precio actual y variación del ticker con caché."""
@@ -62,20 +66,9 @@ def get_ticker_snapshot(symbol: str):
         return 0.0, 0.0
 
 
-
-
-def get_ticker_snapshot(symbol: str):
-    """Obtiene de forma segura el precio actual y variación del ticker."""
-    try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.fast_info
-        price = info.get("lastPrice", 0.0) or 0.0
-        prev = info.get("previousClose", price) or price
-        change_pct = ((price - prev) / prev * 100) if prev else 0.0
-        return price, change_pct
-    except Exception:
-        return 0.0, 0.0
-
+# -------------------------------------------------------------------------
+# FRAGMENTOS CON ESTADO AISLADO (Evita que el cambio de una columna afecte a las demás)
+# -------------------------------------------------------------------------
 @st.fragment
 def render_metals_column():
     st.subheader("🪙 Metales y Commodities")
@@ -91,7 +84,17 @@ def render_metals_column():
     )
     metal_ticker = dict_metales[selected_metal_name]
 
-    m_price, m_chg = get_ticker_snapshot(metal_ticker)
+    # Guardar en Session State para congelar estado individual
+    state_key = f"data_{metal_ticker}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = get_ticker_snapshot(metal_ticker)
+    
+    # Si cambió el selector, actualizamos solo este estado
+    if st.session_state.get("last_metal") != metal_ticker:
+        st.session_state[state_key] = get_ticker_snapshot(metal_ticker)
+        st.session_state["last_metal"] = metal_ticker
+
+    m_price, m_chg = st.session_state[state_key]
     st.metric(selected_metal_name, f"${m_price:,.2f}", f"{m_chg:+.2f}%")
 
     if st.button(f"💾 Guardar {selected_metal_name}", key="save_metal_btn"):
@@ -118,7 +121,15 @@ def render_indices_column():
     )
     index_ticker = dict_indices[selected_index_name]
 
-    i_price, i_chg = get_ticker_snapshot(index_ticker)
+    state_key = f"data_{index_ticker}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = get_ticker_snapshot(index_ticker)
+
+    if st.session_state.get("last_index") != index_ticker:
+        st.session_state[state_key] = get_ticker_snapshot(index_ticker)
+        st.session_state["last_index"] = index_ticker
+
+    i_price, i_chg = st.session_state[state_key]
     st.metric(selected_index_name, f"{i_price:,.2f} pts", f"{i_chg:+.2f}%")
 
     if st.button(f"💾 Guardar {selected_index_name}", key="save_index_btn"):
@@ -128,7 +139,6 @@ def render_indices_column():
             st.success(f"✅ {selected_index_name} guardado en TiDB.")
         else:
             st.error("❌ Error al guardar en TiDB.")
-
 
 
 @st.fragment
@@ -143,7 +153,15 @@ def render_stocks_column():
     )
     stock_ticker = dict_acciones[selected_stock_label]
 
-    s_price, s_chg = get_ticker_snapshot(stock_ticker)
+    state_key = f"data_{stock_ticker}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = get_ticker_snapshot(stock_ticker)
+
+    if st.session_state.get("last_stock") != stock_ticker:
+        st.session_state[state_key] = get_ticker_snapshot(stock_ticker)
+        st.session_state["last_stock"] = stock_ticker
+
+    s_price, s_chg = st.session_state[state_key]
     display_name = selected_stock_label.split(" - ")[0]
     st.metric(display_name, f"${s_price:,.2f}", f"{s_chg:+.2f}%")
 
@@ -156,6 +174,9 @@ def render_stocks_column():
             st.error("❌ Error al guardar en TiDB.")
 
 
+# -------------------------------------------------------------------------
+# FUNCIÓN RENDER PRINCIPAL
+# -------------------------------------------------------------------------
 def render():
     st.title("📈 Análisis de Mercados & Clases de Activos Globales")
     st.markdown("""
