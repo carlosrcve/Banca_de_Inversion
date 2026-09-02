@@ -8,7 +8,6 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from dcf_controller import get_db_connection
 
 
-
 class PortfolioController:
 
     @staticmethod
@@ -41,6 +40,10 @@ class PortfolioController:
         except Exception as e:
             print(f"Error al guardar cotización en TiDB: {e}")
             if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 conn.close()
             return False
 
@@ -89,7 +92,10 @@ class PortfolioController:
         except Exception as e:
             print(f"Error al crear el portafolio en TiDB: {e}")
             if conn:
-                conn.rollback()
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 conn.close()
             return False
 
@@ -101,7 +107,14 @@ class PortfolioController:
             return []
 
         try:
-            cursor = conn.cursor(dictionary=True)
+            # Intento genérico compatible con mysql.connector y pymysql
+            try:
+                cursor = conn.cursor(dictionary=True)
+            except (TypeError, AttributeError):
+                import pymysql
+
+                cursor = conn.cursor(pymysql.cursors.DictCursor)
+
             query = "SELECT id, portfolio_name, description, created_at FROM portfolios ORDER BY id DESC"
             cursor.execute(query)
             rows = cursor.fetchall()
