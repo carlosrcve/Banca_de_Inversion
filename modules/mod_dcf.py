@@ -179,12 +179,8 @@ def render():
     st.sidebar.header("🔍 Consultar Escenario desde MySQL")
     company_name = st.sidebar.text_input("Empresa (MySQL)", value=st.session_state.get("company_name", default_company))
     scenario_name = st.sidebar.text_input("Escenario (MySQL)", value=st.session_state.get("scenario_name", default_scenario))
-
     # -------------------------------------------------------------------------
-    # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL)
-    # -------------------------------------------------------------------------
-    # -------------------------------------------------------------------------
-    # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PROTECCIÓN DIVISION BY ZERO)
+    # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PARSER ROBUSTO)
     # -------------------------------------------------------------------------
     with tab2:
         st.header("📊 Resultados de Valoración (Exclusivo desde MySQL)")
@@ -210,42 +206,57 @@ def render():
             df_db_projs = pd.read_sql(query_projs, con=engine, params={"company": company_name, "scenario": scenario_name})
 
             if not df_db_inputs.empty and not df_db_projs.empty:
-                # Mapeo dinámico leyendo directo de la base de datos
-                inputs_dict = dict(zip(
-                    df_db_inputs["Parametro"].astype(str).str.strip().str.lower(), 
-                    df_db_inputs["Valor"]
-                ))
+                # Función para limpiar cualquier string con %, $ o comas guardado en MySQL
+                def parse_db_val(val, default=0.0):
+                    if pd.isna(val) or val is None:
+                        return float(default)
+                    val_str = str(val).strip().replace("$", "").replace(",", "")
+                    if "%" in val_str:
+                        try:
+                            return float(val_str.replace("%", "").strip()) / 100.0
+                        except ValueError:
+                            return float(default)
+                    try:
+                        return float(val_str)
+                    except ValueError:
+                        return float(default)
 
-                db_historical_revenue = safe_float(inputs_dict.get("historical_revenue"))
-                db_tax_rate = safe_float(inputs_dict.get("tax_rate"))
-                db_capex = safe_float(inputs_dict.get("capex_percent"))
-                db_nwc = safe_float(inputs_dict.get("nwc_percent"))
-                db_da = safe_float(inputs_dict.get("da_percent"))
+                # Mapeo normalizando nombres de parámetros (snake_case)
+                inputs_dict = {
+                    clean_column_name(k): v 
+                    for k, v in zip(df_db_inputs["Parametro"], df_db_inputs["Valor"])
+                }
+
+                # Lectura de parámetros desde la BD con fallbacks financieros válidos
+                db_historical_revenue = parse_db_val(inputs_dict.get("historical_revenue"), 1000000.0)
+                db_tax_rate = parse_db_val(inputs_dict.get("tax_rate"), 0.25)
+                db_capex = parse_db_val(inputs_dict.get("capex_percent"), 0.04)
+                db_nwc = parse_db_val(inputs_dict.get("nwc_percent"), 0.02)
+                db_da = parse_db_val(inputs_dict.get("da_percent"), 0.03)
                 
-                # Cargar tasas financieras
-                db_wacc = safe_float(inputs_dict.get("wacc"), default_val=0.10) # 10% por defecto si no existe
-                db_g = safe_float(inputs_dict.get("terminal_growth_rate"), default_val=0.02) # 2% por defecto
-                db_debt = safe_float(inputs_dict.get("net_debt"))
+                db_wacc = parse_db_val(inputs_dict.get("wacc"), 0.10)
+                db_g = parse_db_val(inputs_dict.get("terminal_growth_rate"), 0.025)
+                db_debt = parse_db_val(inputs_dict.get("net_debt"), 0.0)
 
-                # -------------------------------------------------------------
-                # VALIDACIÓN CRÍTICA CONTRA DIVISION BY ZERO
-                # -------------------------------------------------------------
+                # Ajustar decimales si fueron guardados como enteros (ej. 10 en vez de 0.10)
+                if db_wacc > 1.0: db_wacc /= 100.0
+                if db_g > 1.0: db_g /= 100.0
+                if db_tax_rate > 1.0: db_tax_rate /= 100.0
+                if db_capex > 1.0: db_capex /= 100.0
+                if db_nwc > 1.0: db_nwc /= 100.0
+                if db_da > 1.0: db_da /= 100.0
+
+                # Procesar tasas de proyecciones
+                db_growth_rates = [parse_db_val(x, 0.05) for x in df_db_projs["growth_rate"]]
+                db_ebit_margins = [parse_db_val(x, 0.15) for x in df_db_projs["ebit_margin"]]
+
+                db_growth_rates = [x / 100.0 if x > 1.0 else x for x in db_growth_rates]
+                db_ebit_margins = [x / 100.0 if x > 1.0 else x for x in db_ebit_margins]
+
+                # Validación contra división por cero
                 if db_wacc <= db_g:
-                    st.error(
-                        f"🚨 **Error de consistencia financiera en MySQL:**\n\n"
-                        f"- **WACC:** `{db_wacc:.2%}`\n"
-                        f"- **Crecimiento Terminal (g):** `{db_g:.2%}`\n\n"
-                        f"El WACC debe ser estrictamente mayor que la tasa de crecimiento terminal ($\text{{WACC}} > g$). "
-                        f"Si son iguales, el denominador $(\text{{WACC}} - g)$ resulta en cero o en un valor negativo inválido."
-                    )
+                    st.error(f"🚨 **WACC ({db_wacc:.2%}) debe ser mayor que g ({db_g:.2%}).** Revisa la base de datos.")
                 else:
-                    df_db_projs["growth_rate"] = df_db_projs["growth_rate"].apply(lambda x: safe_float(x, 0.0))
-                    df_db_projs["ebit_margin"] = df_db_projs["ebit_margin"].apply(lambda x: safe_float(x, 0.0))
-
-                    db_growth_rates = df_db_projs["growth_rate"].tolist()
-                    db_ebit_margins = df_db_projs["ebit_margin"].tolist()
-
-                    # Ejecución segura de la valoración
                     results_db = DCFController.run_valuation(
                         historical_revenue=db_historical_revenue,
                         growth_rates=db_growth_rates,
@@ -286,10 +297,10 @@ def render():
                     st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
 
             else:
-                st.warning(f"⚠️ No se encontraron registros guardados en MySQL para la empresa '{company_name}' y el escenario '{scenario_name}'. Carga el archivo en la Pestaña 1 e insértalo a la BD.")
+                st.warning(f"⚠️ No hay datos guardados para '{company_name}' / '{scenario_name}'. Ve a la Pestaña 1 e insértalos en MySQL.")
 
         except Exception as db_err:
-            st.error(f"❌ Error al consultar o procesar datos desde MySQL: {db_err}")
+            st.error(f"❌ Error al procesar datos desde MySQL: {db_err}")
 
     # -------------------------------------------------------------------------
     # PESTAÑA 3: GRÁFICOS
