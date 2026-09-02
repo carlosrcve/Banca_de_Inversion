@@ -430,19 +430,46 @@ def render():
                         pv_tv_val = results_db.pv_terminal_value
                         ev_val = results_db.enterprise_value
                         eq_val = results_db.equity_value
-                        
+
                         tv_pct = (pv_tv_val / ev_val * 100) if ev_val > 0 else 0
                         pv_fcf_total = sum(results_db.pv_cash_flows)
                         fcf_pct = 100 - tv_pct
                         n_years = len(results_db.pv_cash_flows)
 
-                        # --- INTERPRETACIÓN Y EXPLICACIÓN LIMPIA CON MARKDOWN ROBUSTO ---
-                        st.info(
-                            f"📝 **Interpretación Financiera de los Resultados (Dinámico desde MySQL):**\n\n"
-                            f"* **🏢 Enterprise Value (Valor Operativo) — ${ev_val:,.2f}:** Es el valor total de la operación del negocio calculado en base a las premisas registradas en la base de datos.\n\n"
-                            f"* **💵 Equity Value (Patrimonio) — ${eq_val:,.2f}:** Es el valor neto correspondiente a los accionistas. Al compararse con el Enterprise Value, refleja un ajuste por Deuda Neta de **${db_debt:,.2f}**.\n\n"
-                            f"* **🌐 Valor Presente Terminal (PV TV) — ${pv_tv_val:,.2f}:** Es el valor actual de todos los flujos de caja a perpetuidad a partir del año {n_years + 1}. Representa el **{tv_pct:.2f}%** del valor total de la compañía, mientras que los flujos proyectados explícitos de los primeros {n_years} años aportan el **{fcf_pct:.2f}%** restante (${pv_fcf_total:,.2f})."
-                        )
+                        # --- INTERPRETACIÓN Y EXPLICACIÓN CON ESTILO HTML/CSS ---
+                        html_interpretation = f"""
+                        <div style="
+                            background-color: #e8f4f8; 
+                            border-left: 5px solid #29b6f6; 
+                            padding: 18px 20px; 
+                            border-radius: 8px; 
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                            color: #1a202c; 
+                            margin-bottom: 20px;">
+                            
+                            <div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">
+                                📝 Interpretación Financiera de los Resultados (Dinámico desde MySQL):
+                            </div>
+                            
+                            <ul style="margin: 0; padding-left: 20px; line-height: 1.6;">
+                                <li style="margin-bottom: 8px;">
+                                    <b>🏢 Enterprise Value (Valor Operativo) — ${ev_val:,.2f}:</b> 
+                                    Es el valor total de la operación del negocio calculado en base a las premisas registradas en la base de datos.
+                                </li>
+                                <li style="margin-bottom: 8px;">
+                                    <b>💵 Equity Value (Patrimonio) — ${eq_val:,.2f}:</b> 
+                                    Es el valor neto correspondiente a los accionistas. Al compararse con el Enterprise Value, refleja un ajuste por Deuda Neta de <b>${db_debt:,.2f}</b>.
+                                </li>
+                                <li style="margin-bottom: 0px;">
+                                    <b>🌐 Valor Presente Terminal (PV TV) — ${pv_tv_val:,.2f}:</b> 
+                                    Es el valor actual de todos los flujos de caja a perpetuidad a partir del año {n_years + 1}. 
+                                    Representa el <b>{tv_pct:.2f}%</b> del valor total de la compañía, mientras que los flujos proyectados explícitos de los primeros {n_years} años aportan el <b>{fcf_pct:.2f}%</b> restante (<b>${pv_fcf_total:,.2f}</b>).
+                                </li>
+                            </ul>
+                        </div>
+                        """
+
+                        st.markdown(html_interpretation, unsafe_allow_html=True)
 
                         st.markdown("---")
 
