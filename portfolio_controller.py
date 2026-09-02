@@ -1,19 +1,31 @@
 # portfolio_controller.py
 import os
 import sys
+import ssl
+from sqlalchemy import create_engine, text
 
 # Garantiza que el directorio raíz esté en el path de ejecución
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from sqlalchemy import text
-from dcf_controller import get_db_connection, get_sqlalchemy_engine
+from dcf_controller import get_db_connection
+
+
+def get_sqlalchemy_engine():
+    """Crea el motor SQLAlchemy optimizado para TiDB Cloud con SSL."""
+    ssl_context = ssl.create_default_context()
+    connection_url = "mysql+pymysql://4K4VAw4t4ZPFUTF.root:I1lVZQDq2d4KJbQA@gateway01.us-east-1.prod.aws.tidbcloud.com:4000/valuations_db"
+    return create_engine(
+        connection_url,
+        connect_args={"ssl": ssl_context},
+        pool_recycle=3600
+    )
 
 
 class PortfolioController:
 
     @staticmethod
     def save_market_quote(symbol, asset_name, asset_type, price, change_percent):
-        """Guarda una cotización usando SQLAlchemy de forma idéntica al resto de la app."""
+        """Guarda una cotización usando SQLAlchemy autónomo."""
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
@@ -45,7 +57,6 @@ class PortfolioController:
 
         try:
             cursor = conn.cursor()
-            # 1. Insertar el portafolio
             query_portfolio = """
                 INSERT INTO portfolios (portfolio_name, description)
                 VALUES (%s, %s)
@@ -53,7 +64,6 @@ class PortfolioController:
             cursor.execute(query_portfolio, (portfolio_name, description))
             portfolio_id = cursor.lastrowid
 
-            # 2. Insertar cada activo vinculado al portfolio_id
             query_asset = """
                 INSERT INTO portfolio_assets (portfolio_id, symbol, asset_name, asset_type, quantity, purchase_price, purchase_date)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
