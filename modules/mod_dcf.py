@@ -559,103 +559,64 @@ def render():
             st.info("Consulta un escenario válido en MySQL para visualizar el gráfico.")
 
     # -------------------------------------------------------------------------
-    # PESTAÑA 4: HISTORIAL Y CONSULTAS SQL
-    # -------------------------------------------------------------------------
-    # --- FUNCIÓN AUXILIAR PARA GENERAR PLANTILLAS EXCEL EN MEMORIA ---
-    def generate_sample_excel(case_type):
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            if case_type == "analyses":
-                df_sample = pd.DataFrame([{
-                    "company_id": 1,
-                    "scenario_name": "Base",
-                    "historical_revenue": 1000000.00,
-                    "tax_rate": 0.30,
-                    "capex_percent": 0.05,
-                    "nwc_percent": 0.02,
-                    "da_percent": 0.03,
-                    "wacc": 0.10,
-                    "terminal_growth_rate": 0.025,
-                    "net_debt": 200000.00,
-                    "terminal_value": 0.0,
-                    "enterprise_value": 0.0,
-                    "equity_value": 0.0
-                }])
-                df_sample.to_excel(writer, index=False, sheet_name="Analyses")
-                
-            elif case_type == "projections":
-                df_sample = pd.DataFrame([
-                    {"analysis_id": 1, "year_index": 1, "year_label": "Año 1", "growth_rate": 0.10, "ebit_margin": 0.20},
-                    {"analysis_id": 1, "year_index": 2, "year_label": "Año 2", "growth_rate": 0.08, "ebit_margin": 0.22},
-                    {"analysis_id": 1, "year_index": 3, "year_label": "Año 3", "growth_rate": 0.06, "ebit_margin": 0.25}
-                ])
-                df_sample.to_excel(writer, index=False, sheet_name="Projections")
-                
-            elif case_type == "model":
-                df_inputs = pd.DataFrame([
-                    {"Parametro": "company_id", "Valor": 1},
-                    {"Parametro": "scenario_name", "Valor": "Optimista"},
-                    {"Parametro": "historical_revenue", "Valor": 1500000},
-                    {"Parametro": "tax_rate", "Valor": 0.25},
-                    {"Parametro": "capex_percent", "Valor": 0.04},
-                    {"Parametro": "nwc_percent", "Valor": 0.02},
-                    {"Parametro": "da_percent", "Valor": 0.03},
-                    {"Parametro": "wacc", "Valor": 0.09},
-                    {"Parametro": "terminal_growth_rate", "Valor": 0.03},
-                    {"Parametro": "net_debt", "Valor": 150000}
-                ])
-                df_projs = pd.DataFrame([
-                    {"year_label": "2026", "growth_rate": 0.12, "ebit_margin": 0.21},
-                    {"year_label": "2027", "growth_rate": 0.10, "ebit_margin": 0.23},
-                    {"year_label": "2028", "growth_rate": 0.08, "ebit_margin": 0.25}
-                ])
-                df_inputs.to_excel(writer, index=False, sheet_name="Inputs")
-                df_projs.to_excel(writer, index=False, sheet_name="Projections")
-
-        return output.getvalue()
-
-
-    # -------------------------------------------------------------------------
-    # PESTAÑA 4: HISTORIAL, PLANTILLAS Y CONSULTAS SQL
+    # PESTAÑA 4: HISTORIAL, PLANTILLAS FIJAS Y CONSULTAS SQL
     # -------------------------------------------------------------------------
     with tab4:
-        st.header("💾 Base de Datos, Historial & Plantillas")
+        st.header("💾 Base de Datos, Historial & Plantillas Muestra")
 
-        # 📌 SECCIÓN DE DESCARGA DE PLANTILLAS MUESTRA
-        with st.expander("📥 **Descargar Plantillas de Muestra (Excel)**", expanded=True):
-            st.write("Descarga los formatos base de muestra para estructurar tus datos financieros antes de cargarlos:")
+        # 📌 DESCARGA DE ARCHIVOS EXCEL FIJOS DESDE DISCO
+        with st.expander("📥 **Descargar Archivos de Muestra Fijos (Excel)**", expanded=True):
+            st.write("Descarga los archivos Excel modelo fijos almacenados en el proyecto:")
             col1, col2, col3 = st.columns(3)
 
+            # 1. Archivo: dcf_analyses.xlsx
             with col1:
-                st.download_button(
-                    label="📄 Plantilla `dcf_analyses`",
-                    data=generate_sample_excel("analyses"),
-                    file_name="plantilla_dcf_analyses.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                file_path = "dcf_analyses.xlsx"
+                if os.path.exists(file_path):
+                    with open(file_path, "rb") as f:
+                        st.download_button(
+                            label="📄 Descargar `dcf_analyses.xlsx`",
+                            data=f.read(),
+                            file_name="dcf_analyses.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                else:
+                    st.warning(f"⚠️ No se encontró '{file_path}'.")
 
+            # 2. Archivo: dcf_projections.xlsx
             with col2:
-                st.download_button(
-                    label="📄 Plantilla `dcf_projections`",
-                    data=generate_sample_excel("projections"),
-                    file_name="plantilla_dcf_projections.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                file_path = "dcf_projections.xlsx"
+                if os.path.exists(file_path):
+                    with open(file_path, "rb") as f:
+                        st.download_button(
+                            label="📄 Descargar `dcf_projections.xlsx`",
+                            data=f.read(),
+                            file_name="dcf_projections.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                else:
+                    st.warning(f"⚠️ No se encontró '{file_path}'.")
 
+            # 3. Archivo: dcf_valuations.xlsx
             with col3:
-                st.download_button(
-                    label="📊 Modelo Completo (Inputs + Proj)",
-                    data=generate_sample_excel("model"),
-                    file_name="plantilla_modelo_completo.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                file_path = "dcf_valuations.xlsx"
+                if os.path.exists(file_path):
+                    with open(file_path, "rb") as f:
+                        st.download_button(
+                            label="📊 Descargar `dcf_valuations.xlsx`",
+                            data=f.read(),
+                            file_name="dcf_valuations.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                else:
+                    st.warning(f"⚠️ No se encontró '{file_path}'.")
 
         st.markdown("---")
 
-        # 📌 CONSULTAS E HISTORIAL
+        # 📌 SECCIÓN DE CONSULTAS SQL E HISTORIAL
         st.subheader("⚙️ Consultas y Registros Guardados")
         if st.button("🔄 Consultar Historial Controller"):
             scenarios = DCFController.get_saved_scenarios(company_name)
