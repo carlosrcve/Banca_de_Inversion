@@ -561,64 +561,6 @@ def render():
     # -------------------------------------------------------------------------
     # PESTAÑA 4: HISTORIAL Y CONSULTAS SQL
     # -------------------------------------------------------------------------
-    import io
-import pandas as pd
-import streamlit as st
-
-# --- FUNCIÓN AUXILIAR PARA GENERAR PLANTILLAS EXCEL EN MEMORIA ---
-def generate_sample_excel(case_type):
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        if case_type == "analyses":
-            df_sample = pd.DataFrame([{
-                "company_id": 1,
-                "scenario_name": "Base",
-                "historical_revenue": 1000000.00,
-                "tax_rate": 0.30,
-                "capex_percent": 0.05,
-                "nwc_percent": 0.02,
-                "da_percent": 0.03,
-                "wacc": 0.10,
-                "terminal_growth_rate": 0.025,
-                "net_debt": 200000.00,
-                "terminal_value": 0.0,
-                "enterprise_value": 0.0,
-                "equity_value": 0.0
-            }])
-            df_sample.to_excel(writer, index=False, sheet_name="Analyses")
-            
-        elif case_type == "projections":
-            df_sample = pd.DataFrame([
-                {"analysis_id": 1, "year_index": 1, "year_label": "Año 1", "growth_rate": 0.10, "ebit_margin": 0.20},
-                {"analysis_id": 1, "year_index": 2, "year_label": "Año 2", "growth_rate": 0.08, "ebit_margin": 0.22},
-                {"analysis_id": 1, "year_index": 3, "year_label": "Año 3", "growth_rate": 0.06, "ebit_margin": 0.25}
-            ])
-            df_sample.to_excel(writer, index=False, sheet_name="Projections")
-            
-        elif case_type == "model":
-            df_inputs = pd.DataFrame([
-                {"Parametro": "company_id", "Valor": 1},
-                {"Parametro": "scenario_name", "Valor": "Optimista"},
-                {"Parametro": "historical_revenue", "Valor": 1500000},
-                {"Parametro": "tax_rate", "Valor": 0.25},
-                {"Parametro": "capex_percent", "Valor": 0.04},
-                {"Parametro": "nwc_percent", "Valor": 0.02},
-                {"Parametro": "da_percent", "Valor": 0.03},
-                {"Parametro": "wacc", "Valor": 0.09},
-                {"Parametro": "terminal_growth_rate", "Valor": 0.03},
-                {"Parametro": "net_debt", "Valor": 150000}
-            ])
-            df_projs = pd.DataFrame([
-                {"year_label": "2026", "growth_rate": 0.12, "ebit_margin": 0.21},
-                {"year_label": "2027", "growth_rate": 0.10, "ebit_margin": 0.23},
-                {"year_label": "2028", "growth_rate": 0.08, "ebit_margin": 0.25}
-            ])
-            df_inputs.to_excel(writer, index=False, sheet_name="Inputs")
-            df_projs.to_excel(writer, index=False, sheet_name="Projections")
-
-    return output.getvalue()
-
-
     # --- FUNCIÓN AUXILIAR PARA GENERAR PLANTILLAS EXCEL EN MEMORIA ---
     def generate_sample_excel(case_type):
         output = io.BytesIO()
