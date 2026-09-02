@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 from portfolio_controller import PortfolioController
-
+import plotly.graph_objects as go
 
 # -------------------------------------------------------------------------
 # FUNCIÓN EN CACHÉ PARA CARGAR LAS ACCIONES DEL S&P 500 DINÁMICAMENTE
