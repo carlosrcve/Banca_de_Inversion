@@ -1,13 +1,97 @@
-import re
 import io
+import re
 import unicodedata
+import mysql.connector
+from mysql.connector import Error
 import pandas as pd
 import streamlit as st
 from sqlalchemy import text
 
-# Importaciones del módulo controller
+# Importaciones del módulo controller y modelos
 from dcf_controller import DCFController, get_sqlalchemy_engine
 from dcf_models import DCFInputs
+
+
+# =============================================================================
+# FUNCIONES AUXILIARES Y DE UTILIDAD
+# =============================================================================
+def clean_column_name(col_name: str) -> str:
+    """Limpia acentos, caracteres especiales y espacios para nombres SQL válidos."""
+    col = str(col_name).strip()
+    col = unicodedata.normalize("NFKD", col).encode("ASCII", "ignore").decode("utf-8")
+    col = re.sub(r"[^a-zA-Z0-9]+", "_", col)
+    col = re.sub(r"_+", "_", col).strip("_").lower()
+    return col if col else "columna_sin_nombre"
+
+
+def safe_float(val, default_val=0.0):
+    """Convierte un valor a float de manera segura sin lanzar excepciones."""
+    if val is None or pd.isna(val):
+        return float(default_val)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return float(default_val)
+
+
+def parse_num(val, default=0.0):
+    """Auxiliar para parsear cadenas con %, $ o comas a valores numéricos flotantes."""
+    if pd.isna(val) or val is None:
+        return default
+    try:
+        s = str(val).replace("%", "").replace("$", "").replace(",", "").strip()
+        return float(s)
+    except (ValueError, TypeError):
+        return default
+
+
+def clean_str(val):
+    """Normaliza cadenas de texto a minúsculas y sin espacios laterales."""
+    return str(val).strip().lower()
+
+
+def init_db_tables(cursor):
+    """Crea la estructura de tablas Padre e Hijo en MySQL si no existen."""
+    query_padre = """
+    CREATE TABLE IF NOT EXISTS dcf_analyses (
+        analysis_id INT AUTO_INCREMENT PRIMARY KEY,
+        company_id INT NOT NULL DEFAULT 1,
+        scenario_name VARCHAR(255) NOT NULL,
+        historical_revenue DECIMAL(18,2) NOT NULL,
+        tax_rate DECIMAL(10,4) NOT NULL,
+        capex_percent DECIMAL(10,4) NOT NULL,
+        nwc_percent DECIMAL(10,4) NOT NULL,
+        da_percent DECIMAL(10,4) NOT NULL,
+        wacc DECIMAL(10,4) NOT NULL,
+        terminal_growth_rate DECIMAL(10,4) NOT NULL,
+        net_debt DECIMAL(18,2) NOT NULL,
+        terminal_value DECIMAL(18,2) NOT NULL,
+        enterprise_value DECIMAL(18,2) NOT NULL,
+        equity_value DECIMAL(18,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+    query_hijo = """
+    CREATE TABLE IF NOT EXISTS dcf_projections (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        analysis_id INT NOT NULL,
+        year_index INT NOT NULL,
+        year_label VARCHAR(50) NOT NULL,
+        growth_rate DECIMAL(10,4) NOT NULL,
+        ebit_margin DECIMAL(10,4) NOT NULL,
+        projected_revenue DECIMAL(18,2) NOT NULL,
+        ebit DECIMAL(18,2) NOT NULL,
+        nopat DECIMAL(18,2) NOT NULL,
+        da DECIMAL(18,2) NOT NULL,
+        capex DECIMAL(18,2) NOT NULL,
+        nwc_change DECIMAL(18,2) NOT NULL,
+        fcf DECIMAL(18,2) NOT NULL,
+        pv_fcf DECIMAL(18,2) NOT NULL,
+        FOREIGN KEY (analysis_id) REFERENCES dcf_analyses(analysis_id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    """
+    cursor.execute(query_padre)
+    cursor.execute(query_hijo)
 
 
 def show_dcf_dataframe(engine, selected_company_id):
@@ -31,50 +115,34 @@ def show_dcf_dataframe(engine, selected_company_id):
         WHERE c.company_id = :company_id;
     """)
     
-    df = pd.read_sql(query, engine, params={"company_id": selected_company_id})
-    
-    if not df.empty:
-        st.dataframe(
-            df,
-            column_config={
-                "Ingresos Históricos": st.column_config.NumberColumn(format="$%.2f"),
-                "Impuestos (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                "WACC (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                "Crec. Terminal (%)": st.column_config.NumberColumn(format="%.2f%%"),
-                "Enterprise Value ($)": st.column_config.NumberColumn(format="$%.2f"),
-                "Equity Value ($)": st.column_config.NumberColumn(format="$%.2f"),
-            },
-            use_container_width=True
-        )
-    else:
-        st.info(f"No se encontraron análisis en `dcf_analyses` para el ID de Empresa: {selected_company_id}")
-
-
-def clean_column_name(col_name: str) -> str:
-    """Limpia acentos, caracteres especiales y espacios para nombres SQL válidos."""
-    col = str(col_name).strip()
-    col = unicodedata.normalize("NFKD", col).encode("ASCII", "ignore").decode("utf-8")
-    col = re.sub(r"[^a-zA-Z0-9]+", "_", col)
-    col = re.sub(r"_+", "_", col).strip("_").lower()
-    return col if col else "columna_sin_nombre"
-
-
-def safe_float(val, default_val=0.0):
-    """Convierte un valor a float de manera segura sin lanzar excepciones."""
-    if val is None or pd.isna(val):
-        return float(default_val)
     try:
-        return float(val)
-    except (ValueError, TypeError):
-        return float(default_val)
+        df = pd.read_sql(query, engine, params={"company_id": selected_company_id})
+        if not df.empty:
+            st.dataframe(
+                df,
+                column_config={
+                    "Ingresos Históricos": st.column_config.NumberColumn(format="$%.2f"),
+                    "Impuestos (%)": st.column_config.NumberColumn(format="%.2f%%"),
+                    "WACC (%)": st.column_config.NumberColumn(format="%.2f%%"),
+                    "Crec. Terminal (%)": st.column_config.NumberColumn(format="%.2f%%"),
+                    "Enterprise Value ($)": st.column_config.NumberColumn(format="$%.2f"),
+                    "Equity Value ($)": st.column_config.NumberColumn(format="$%.2f"),
+                },
+                use_container_width=True
+            )
+        else:
+            st.info(f"No se encontraron análisis en `dcf_analyses` para el ID de Empresa: {selected_company_id}")
+    except Exception as e:
+        st.error(f"Error al consultar la vista consolidada: {e}")
 
 
+# =============================================================================
+# APLICACIÓN PRINCIPAL STREAMLIT
+# =============================================================================
 def render():
     st.title("📊 Modelo de Valoración por Flujo de Caja Descontado (DCF)")
 
-    # -------------------------------------------------------------------------
-    # VARIABLES DE ESTADO
-    # -------------------------------------------------------------------------
+    # Variables de estado
     if "df_excel_inputs" not in st.session_state:
         st.session_state.df_excel_inputs = None
     if "df_excel_projs" not in st.session_state:
@@ -83,7 +151,12 @@ def render():
     default_company = "Empresa Ejemplo S.A."
     default_scenario = "Base 2026"
 
-    # Pestañas
+    # Sidebar: Filtros globales de consulta
+    st.sidebar.header("🔍 Consultar Escenario desde MySQL")
+    company_name = st.sidebar.text_input("Empresa (MySQL)", value=st.session_state.get("company_name", default_company))
+    scenario_name = st.sidebar.text_input("Escenario (MySQL)", value=st.session_state.get("scenario_name", default_scenario))
+
+    # Pestañas principales
     tab1, tab2, tab3, tab4 = st.tabs([
         "📥 1. Cargar Excel a BD", 
         "📊 2. Resultados Desde MySQL", 
@@ -91,87 +164,9 @@ def render():
         "💾 4. Base de Datos / Historial"
     ])
 
-    # Función auxiliar para parsear cadenas de texto o números a flotantes
-    def parse_num(val, default=0.0):
-        if pd.isna(val):
-            return default
-        try:
-            s = str(val).replace("%", "").replace("$", "").replace(",", "").strip()
-            return float(s)
-        except:
-            return default
-
-    def clean_str(val):
-        return str(val).strip().lower()
-
-    # --- FUNCIÓN PARA CREAR TABLAS EN MYSQL SI NO EXISTEN ---
-    def init_db_tables(cursor):
-        query_padre = """
-        CREATE TABLE IF NOT EXISTS dcf_analyses (
-            analysis_id INT AUTO_INCREMENT PRIMARY KEY,
-            company_id INT NOT NULL DEFAULT 1,
-            scenario_name VARCHAR(255) NOT NULL,
-            historical_revenue DECIMAL(18,2) NOT NULL,
-            tax_rate DECIMAL(10,4) NOT NULL,
-            capex_percent DECIMAL(10,4) NOT NULL,
-            nwc_percent DECIMAL(10,4) NOT NULL,
-            da_percent DECIMAL(10,4) NOT NULL,
-            wacc DECIMAL(10,4) NOT NULL,
-            terminal_growth_rate DECIMAL(10,4) NOT NULL,
-            net_debt DECIMAL(18,2) NOT NULL,
-            terminal_value DECIMAL(18,2) NOT NULL,
-            enterprise_value DECIMAL(18,2) NOT NULL,
-            equity_value DECIMAL(18,2) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        """
-        query_hijo = """
-        CREATE TABLE IF NOT EXISTS dcf_projections (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            analysis_id INT NOT NULL,
-            year_index INT NOT NULL,
-            year_label VARCHAR(50) NOT NULL,
-            growth_rate DECIMAL(10,4) NOT NULL,
-            ebit_margin DECIMAL(10,4) NOT NULL,
-            projected_revenue DECIMAL(18,2) NOT NULL,
-            ebit DECIMAL(18,2) NOT NULL,
-            nopat DECIMAL(18,2) NOT NULL,
-            da DECIMAL(18,2) NOT NULL,
-            capex DECIMAL(18,2) NOT NULL,
-            nwc_change DECIMAL(18,2) NOT NULL,
-            fcf DECIMAL(18,2) NOT NULL,
-            pv_fcf DECIMAL(18,2) NOT NULL,
-            FOREIGN KEY (analysis_id) REFERENCES dcf_analyses(analysis_id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        """
-        cursor.execute(query_padre)
-        cursor.execute(query_hijo)
-
-
-    # --- CASO 4 EN PESTAÑA 1 ---
-    if caso_seleccionado == "Caso 4: Persistencia MySQL (Tabla Padre/Hijo)":
-        st.subheader("💾 Caso 4: Registro y Carga de Valoraciones DCF en MySQL")
-
-        with st.expander("⚙️ Inicialización de Tablas en Base de Datos", expanded=False):
-            if st.button("Crear / Verificar Tablas DCF"):
-                try:
-                    # Reemplazar por tus credenciales de conexión
-                    conn = mysql.connector.connect(
-                        host=st.secrets["mysql"]["host"],
-                        user=st.secrets["mysql"]["user"],
-                        password=st.secrets["mysql"]["password"],
-                        database=st.secrets["mysql"]["database"]
-                    )
-                    cursor = conn.cursor()
-                    init_db_tables(cursor)
-                    conn.commit()
-                    cursor.close()
-                    conn.close()
-                    st.success("✅ Tablas 'dcf_analyses' y 'dcf_projections' listas en MySQL.")
-                except Error as e:
-                    st.error(f"❌ Error al conectar o crear tablas en MySQL: {e}")
-
-    # Pestaña 1 con todo el flujo de casos en orden
+    # -------------------------------------------------------------------------
+    # PESTAÑA 1: CARGA DE ARCHIVOS
+    # -------------------------------------------------------------------------
     with tab1:
         st.header("📥 Cargar Modelo DCF a MySQL")
 
@@ -192,9 +187,7 @@ def render():
                     df_first_sheet = pd.read_excel(excel_file, sheet_name=0)
                     df_first_sheet.columns = df_first_sheet.columns.astype(str).str.strip()
 
-                    # =========================================================================
-                    # CASO 1: ARCHIVO DIRECTO DE `dcf_analyses.xlsx`
-                    # =========================================================================
+                    # CASO 1: Archivo directo dcf_analyses
                     if "historical_revenue" in df_first_sheet.columns and "scenario_name" in df_first_sheet.columns:
                         st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura directa de **dcf_analyses** ({len(df_first_sheet)} registros).")
                         
@@ -206,54 +199,39 @@ def render():
                             except Exception as e:
                                 st.error(f"❌ Error al insertar en dcf_analyses: {e}")
 
-                    # =========================================================================
-                    # CASO 2: ARCHIVO DIRECTO DE `dcf_projections.xlsx`
-                    # =========================================================================
+                    # CASO 2: Archivo directo dcf_projections
                     elif "year_index" in df_first_sheet.columns and ("valuation_id" in df_first_sheet.columns or "analysis_id" in df_first_sheet.columns):
                         st.info(f"📄 Archivo **{uploaded_file.name}** detectado para la tabla **dcf_projections** ({len(df_first_sheet)} filas).")
                         
-                        # 1. Normalizar el nombre de la columna a 'analysis_id'
                         if "valuation_id" in df_first_sheet.columns:
                             df_first_sheet = df_first_sheet.rename(columns={"valuation_id": "analysis_id"})
 
-                        # 2. Consultar los IDs existentes en dcf_analyses (ordenados del más reciente al más antiguo)
                         try:
                             df_parents = pd.read_sql("SELECT analysis_id, scenario_name FROM dcf_analyses ORDER BY analysis_id DESC", con=engine)
-                        except Exception as e:
+                        except Exception:
                             df_parents = pd.DataFrame()
 
                         if df_parents.empty:
                             st.error("❌ No hay registros en `dcf_analyses`. Debes subir primero la tabla padre.")
                         else:
-                            latest_id = int(df_parents.iloc[0]["analysis_id"])
-
                             target_analysis_id = st.selectbox(
                                 "📌 Vincular estas proyecciones al Análisis ID:",
                                 options=df_parents["analysis_id"].tolist(),
-                                index=0,  # Preselecciona el más reciente
+                                index=0,
                                 format_func=lambda x: f"ID #{x} - Escenario: {df_parents[df_parents['analysis_id']==x]['scenario_name'].values[0]}"
                             )
 
                             df_first_sheet["analysis_id"] = target_analysis_id
 
-                            # 3. Inserción directa en MySQL
                             if st.button(f"🚀 Guardar {uploaded_file.name} en `dcf_projections`", key=f"btn_direct_{uploaded_file.name}"):
                                 try:
                                     df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
-                                    
-                                    df_to_insert.to_sql(
-                                        name="dcf_projections", 
-                                        con=engine, 
-                                        if_exists="append", 
-                                        index=False
-                                    )
-                                    st.success(f"✅ ¡Guardado exitoso! Se insertaron los {len(df_to_insert)} registros en `dcf_projections` vinculados al `analysis_id = {target_analysis_id}`.")
+                                    df_to_insert.to_sql(name="dcf_projections", con=engine, if_exists="append", index=False)
+                                    st.success(f"✅ ¡Guardado exitoso! Se insertaron los {len(df_to_insert)} registros vinculados al `analysis_id = {target_analysis_id}`.")
                                 except Exception as e:
                                     st.error(f"❌ Error al guardar en MySQL: {e}")
 
-                    # =========================================================================
-                    # CASO 3: ARCHIVO MODELO INTERNO (HOJAS "Inputs" Y "Projections")
-                    # =========================================================================
+                    # CASO 3: Archivo modelo interno (Inputs + Projections)
                     else:
                         st.info(f"📄 Archivo **{uploaded_file.name}** procesado como Modelo Interactivo (Inputs + Projections).")
                         
@@ -382,21 +360,13 @@ def render():
                     st.error(f"❌ Error al leer el archivo **{uploaded_file.name}**: {e}")
 
     # -------------------------------------------------------------------------
-    # CONTROLES SIDEBAR (FILTROS DE CONSULTA A MYSQL)
-    # -------------------------------------------------------------------------
-    st.sidebar.header("🔍 Consultar Escenario desde MySQL")
-    company_name = st.sidebar.text_input("Empresa (MySQL)", value=st.session_state.get("company_name", default_company))
-    scenario_name = st.sidebar.text_input("Escenario (MySQL)", value=st.session_state.get("scenario_name", default_scenario))
-    # -------------------------------------------------------------------------
-    # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PARSER ROBUSTO)
+    # PESTAÑA 2: RESULTADOS
     # -------------------------------------------------------------------------
     with tab2:
         st.header("📊 Resultados de Valoración (Exclusivo desde MySQL)")
 
         try:
             engine = get_sqlalchemy_engine()
-
-            # 1. Verificación directa de registros en dcf_analyses
             df_analyses_check = pd.read_sql("SELECT analysis_id FROM dcf_analyses LIMIT 1", con=engine)
 
             if df_analyses_check.empty:
@@ -420,7 +390,6 @@ def render():
                 df_db_projs = pd.read_sql(query_projs, con=engine, params={"company": company_name, "scenario": scenario_name})
 
                 if not df_db_inputs.empty and not df_db_projs.empty:
-                    # Función para limpiar cualquier string con %, $ o comas guardado en MySQL
                     def parse_db_val(val, default=0.0):
                         if pd.isna(val) or val is None:
                             return float(default)
@@ -435,24 +404,20 @@ def render():
                         except ValueError:
                             return float(default)
 
-                    # Mapeo normalizando nombres de parámetros (snake_case)
                     inputs_dict = {
                         clean_column_name(k): v 
                         for k, v in zip(df_db_inputs["Parametro"], df_db_inputs["Valor"])
                     }
 
-                    # Lectura de parámetros desde la BD con fallbacks financieros válidos
                     db_historical_revenue = parse_db_val(inputs_dict.get("historical_revenue"), 1000000.0)
                     db_tax_rate = parse_db_val(inputs_dict.get("tax_rate"), 0.25)
                     db_capex = parse_db_val(inputs_dict.get("capex_percent"), 0.04)
                     db_nwc = parse_db_val(inputs_dict.get("nwc_percent"), 0.02)
                     db_da = parse_db_val(inputs_dict.get("da_percent"), 0.03)
-                    
                     db_wacc = parse_db_val(inputs_dict.get("wacc"), 0.10)
                     db_g = parse_db_val(inputs_dict.get("terminal_growth_rate"), 0.025)
                     db_debt = parse_db_val(inputs_dict.get("net_debt"), 0.0)
 
-                    # Ajustar decimales si fueron guardados como enteros (ej. 10 en vez de 0.10)
                     if db_wacc > 1.0: db_wacc /= 100.0
                     if db_g > 1.0: db_g /= 100.0
                     if db_tax_rate > 1.0: db_tax_rate /= 100.0
@@ -460,14 +425,12 @@ def render():
                     if db_nwc > 1.0: db_nwc /= 100.0
                     if db_da > 1.0: db_da /= 100.0
 
-                    # Procesar tasas de proyecciones
                     db_growth_rates = [parse_db_val(x, 0.05) for x in df_db_projs["growth_rate"]]
                     db_ebit_margins = [parse_db_val(x, 0.15) for x in df_db_projs["ebit_margin"]]
 
                     db_growth_rates = [x / 100.0 if x > 1.0 else x for x in db_growth_rates]
                     db_ebit_margins = [x / 100.0 if x > 1.0 else x for x in db_ebit_margins]
 
-                    # Validación contra división por cero
                     if db_wacc <= db_g:
                         st.error(f"🚨 **WACC ({db_wacc:.2%}) debe ser mayor que g ({db_g:.2%}).** Revisa la base de datos.")
                     else:
@@ -489,10 +452,6 @@ def render():
                         col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
                         col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
 
-                        # --- CÁLCULO DINÁMICO DE PORCENTAJES Y SUMATORIAS ---
-                        import textwrap
-
-                        # --- CÁLCULO DINÁMICO DE PORCENTAJES Y SUMATORIAS ---
                         pv_tv_val = results_db.pv_terminal_value
                         ev_val = results_db.enterprise_value
                         eq_val = results_db.equity_value
@@ -502,7 +461,6 @@ def render():
                         fcf_pct = 100 - tv_pct
                         n_years = len(results_db.pv_cash_flows)
 
-                        # --- INTERPRETACIÓN Y EXPLICACIÓN LIMPIA (SIN PROBLEMAS DE SANGRÍA) ---
                         html_interpretation = (
                             f'<div style="background-color: #e8f4f8; border-left: 5px solid #29b6f6; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
                             f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">📝 Interpretación Financiera de los Resultados (Dinámico desde MySQL):</div>'
@@ -559,97 +517,52 @@ def render():
             st.info("Consulta un escenario válido en MySQL para visualizar el gráfico.")
 
     # -------------------------------------------------------------------------
-    # PESTAÑA 4: HISTORIAL, PLANTILLAS FIJAS Y CONSULTAS SQL
+    # PESTAÑA 4: BASE DE DATOS E HISTORIAL
     # -------------------------------------------------------------------------
     with tab4:
         st.header("💾 Base de Datos, Historial & Plantillas Muestra")
 
-        # 📌 DEFINE LA VARIABLE 'caso_seleccionado' PARA EVITAR EL NameError
         caso_seleccionado = st.selectbox(
-            "Selecciona la modalidad de carga:",
+            "Selecciona la modalidad de carga o gestión:",
             [
                 "Caso 1: Archivo Único",
                 "Caso 2: Análisis Simple",
                 "Caso 3: Carga Avanzada",
                 "Caso 4: Persistencia MySQL (Tabla Padre/Hijo)"
             ],
-            key="tab4_caso_seleccionado"
+            key="caso_select_tab4"
         )
 
-        # 📌 DESCARGA DE ARCHIVOS EXCEL FIJOS DESDE DISCO
-        with st.expander("📥 **Descargar Archivos de Muestra Fijos (Excel)**", expanded=True):
-            st.write("Descarga los archivos Excel modelo fijos almacenados en el proyecto:")
-            col1, col2, col3 = st.columns(3)
-
-            # 1. Archivo: dcf_analyses.xlsx
-            with col1:
-                file_path = "dcf_analyses.xlsx"
-                if os.path.exists(file_path):
-                    with open(file_path, "rb") as f:
-                        st.download_button(
-                            label="📄 Descargar `dcf_analyses.xlsx`",
-                            data=f.read(),
-                            file_name="dcf_analyses.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
-                else:
-                    st.warning(f"⚠️ No se encontró '{file_path}'.")
-
-            # 2. Archivo: dcf_projections.xlsx
-            with col2:
-                file_path = "dcf_projections.xlsx"
-                if os.path.exists(file_path):
-                    with open(file_path, "rb") as f:
-                        st.download_button(
-                            label="📄 Descargar `dcf_projections.xlsx`",
-                            data=f.read(),
-                            file_name="dcf_projections.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
-                else:
-                    st.warning(f"⚠️ No se encontró '{file_path}'.")
-
-            # 3. Archivo: dcf_valuations.xlsx
-            with col3:
-                file_path = "dcf_valuations.xlsx"
-                if os.path.exists(file_path):
-                    with open(file_path, "rb") as f:
-                        st.download_button(
-                            label="📊 Descargar `dcf_valuations.xlsx`",
-                            data=f.read(),
-                            file_name="dcf_valuations.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
-                        )
-                else:
-                    st.warning(f"⚠️ No se encontró '{file_path}'.")
-
-        st.markdown("---")
-
-        # 📌 EVALUACIÓN CONDICIONAL DEL CASO SELECCIONADO
         if caso_seleccionado == "Caso 4: Persistencia MySQL (Tabla Padre/Hijo)":
-            st.info("ℹ️ Modalidad 'Caso 4: Persistencia MySQL' activa.")
+            st.subheader("⚙️ Inicialización y Consulta de Tablas DCF")
 
-        # 📌 SECCIÓN DE CONSULTAS SQL E HISTORIAL
-        st.subheader("⚙️ Consultas y Registros Guardados")
-        if st.button("🔄 Consultar Historial Controller"):
-            scenarios = DCFController.get_saved_scenarios(company_name)
-            if scenarios:
-                st.dataframe(pd.DataFrame(scenarios), use_container_width=True)
-            else:
-                st.info(f"Sin registros para '{company_name}'.")
+            with st.expander("⚙️ Inicialización de Tablas en Base de Datos", expanded=False):
+                if st.button("Crear / Verificar Tablas DCF"):
+                    try:
+                        conn = mysql.connector.connect(
+                            host=st.secrets["mysql"]["host"],
+                            user=st.secrets["mysql"]["user"],
+                            password=st.secrets["mysql"]["password"],
+                            database=st.secrets["mysql"]["database"]
+                        )
+                        cursor = conn.cursor()
+                        init_db_tables(cursor)
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        st.success("✅ Tablas 'dcf_analyses' y 'dcf_projections' listas en MySQL.")
+                    except Error as e:
+                        st.error(f"❌ Error al conectar o crear tablas en MySQL: {e}")
 
-        st.markdown("---")
-        st.subheader("📋 Consultar Registro Unificado (companies + dcf_analyses)")
-        selected_company_id = st.number_input("ID de Empresa a consultar (`company_id`)", min_value=1, value=101, step=1)
-        
-        if st.button("🔍 Mostrar Tabla de Análisis Relacionados"):
+            st.subheader("📋 Consolidado por Empresa")
             try:
                 engine = get_sqlalchemy_engine()
-                show_dcf_dataframe(engine, selected_company_id)
-            except Exception as err_join:
-                st.error(f"❌ Error al realizar la consulta JOIN: {err_join}")
+                selected_company_id = st.number_input("ID de Empresa a consultar:", min_value=1, value=1, step=1)
+                if st.button("Buscar Análisis"):
+                    show_dcf_dataframe(engine, selected_company_id)
+            except Exception as e:
+                st.error(f"Error al conectar con SQLAlchemy: {e}")
 
 
+if __name__ == "__main__":
+    render()
