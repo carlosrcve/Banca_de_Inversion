@@ -9,3 +9,4 @@ cryptography
 yfinance
 openpyxl
 matplotlib
+plotly
