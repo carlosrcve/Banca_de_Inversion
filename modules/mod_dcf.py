@@ -141,26 +141,26 @@ def render():
                     # CASO 2: ARCHIVO DIRECTO DE `dcf_projections.xlsx`
                     # =========================================================================
                     elif "year_index" in df_first_sheet.columns and ("valuation_id" in df_first_sheet.columns or "analysis_id" in df_first_sheet.columns):
-                        st.info(f"📄 Archivo **{uploaded_file.name}** detectado para la tabla **dcf_projections** ({len(df_first_sheet)} filas).")
+                        st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura directa de **dcf_projections** ({len(df_first_sheet)} registros).")
                         
-                        # 1. Asegurar que la columna mapee exactamente a 'valuation_id' según tu CREATE TABLE
-                        if "analysis_id" in df_first_sheet.columns and "valuation_id" not in df_first_sheet.columns:
-                            df_first_sheet = df_first_sheet.rename(columns={"analysis_id": "valuation_id"})
+                        # 1. Mapeo clave: MySQL exige 'analysis_id' (igual que en el Caso 3)
+                        if "valuation_id" in df_first_sheet.columns:
+                            df_first_sheet = df_first_sheet.rename(columns={"valuation_id": "analysis_id"})
 
-                        # 2. Inserción directa al hacer clic
+                        # 2. Inserción directa
                         if st.button(f"🚀 Guardar {uploaded_file.name} en `dcf_projections`", key=f"btn_direct_{uploaded_file.name}"):
                             try:
-                                # Descartar columnas que MySQL genera automáticamente (PK autoincremental y timestamp)
+                                # Eliminar columnas autogeneradas por MySQL si vienen en el Excel
                                 df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
                                 
-                                # Insertar directamente en la tabla dcf_projections
+                                # Guardar directamente en la tabla dcf_projections
                                 df_to_insert.to_sql(
                                     name="dcf_projections", 
                                     con=engine, 
                                     if_exists="append", 
                                     index=False
                                 )
-                                st.success(f"✅ ¡Listo! Se guardaron los {len(df_to_insert)} registros del Excel en la tabla `dcf_projections`.")
+                                st.success(f"✅ ¡Se insertaron {len(df_to_insert)} registros exitosamente en `dcf_projections`!")
                             except Exception as e:
                                 st.error(f"❌ Error al guardar en MySQL: {e}")
 
