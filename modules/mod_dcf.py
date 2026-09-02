@@ -110,29 +110,34 @@ def render():
 
         if st.session_state.get("df_excel_inputs") is not None or st.session_state.get("df_excel_projs") is not None:
             st.markdown("---")
+            # En Tab 1: Al hacer click en "Insertar Data Cruda de Excel en MySQL"
             if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
                 try:
                     engine = get_sqlalchemy_engine()
 
                     if st.session_state.df_excel_inputs is not None:
                         df_inp = st.session_state.df_excel_inputs.copy()
-                        df_inp.columns = [clean_column_name(col) for col in df_inp.columns]
-                        for col in df_inp.columns:
-                            if df_inp[col].dtype == "object":
-                                df_inp[col] = df_inp[col].astype(str).str.replace(",", ".", regex=False)
+                        # Mapear columnas exactamente como tu CREATE TABLE de excel_inputs_raw
+                        df_inp.columns = ["Parametro", "Valor"] if len(df_inp.columns) >= 2 else df_inp.columns
                         df_inp["company_name"] = st.session_state.get("company_name", default_company)
                         df_inp["scenario_name"] = st.session_state.get("scenario_name", default_scenario)
-                        df_inp.to_sql("excel_inputs_raw", con=engine, if_exists="append", index=False)
+                        
+                        # Guardar respetando la estructura existente
+                        df_inp[["company_name", "scenario_name", "Parametro", "Valor"]].to_sql(
+                            "excel_inputs_raw", con=engine, if_exists="append", index=False
+                        )
 
                     if st.session_state.df_excel_projs is not None:
                         df_proj = st.session_state.df_excel_projs.copy()
-                        df_proj.columns = [clean_column_name(col) for col in df_proj.columns]
-                        for col in df_proj.columns:
-                            if df_proj[col].dtype == "object":
-                                df_proj[col] = df_proj[col].astype(str).str.replace(",", ".", regex=False)
-                        df_proj["company_name"] = st.session_state.get("company_name", default_company)
-                        df_proj["scenario_name"] = st.session_state.get("scenario_name", default_scenario)
-                        df_proj.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
+                        # Mapear a year, growth_rate, ebit_margin
+                        if "growth_rate" in df_proj.columns and "ebit_margin" in df_proj.columns:
+                            df_proj["year"] = range(1, len(df_proj) + 1)
+                            df_proj["company_name"] = st.session_state.get("company_name", default_company)
+                            df_proj["scenario_name"] = st.session_state.get("scenario_name", default_scenario)
+
+                            df_proj[["company_name", "scenario_name", "year", "growth_rate", "ebit_margin"]].to_sql(
+                                "excel_projections_raw", con=engine, if_exists="append", index=False
+                            )
 
                     st.success("✅ ¡Data insertada en MySQL correctamente!")
                 except Exception as err:
@@ -199,32 +204,39 @@ def render():
         # =========================================================================
         # PESTAÑA 2: RESULTADOS Y FCFF (DESDE MYSQL)
         # =========================================================================
+        # En Tab 2:
         with tab2:
-            st.header("📊 Resultados de Valoración desde MySQL")
+            st.header("📊 Resultados de Valoración (Leídos desde MySQL)")
 
             try:
                 engine = get_sqlalchemy_engine()
 
-                # 1. Consultar parámetros/inputs guardados en MySQL para la empresa y escenario seleccionados
+                # 1. Leer Inputs desde tu tabla excel_inputs_raw
                 query_inputs = """
-                    SELECT * FROM excel_inputs_raw 
+                    SELECT Parametro, Valor 
+                    FROM excel_inputs_raw 
                     WHERE company_name = %s AND scenario_name = %s
+                    ORDER BY id ASC
                 """
                 df_db_inputs = pd.read_sql(query_inputs, con=engine, params=(company_name, scenario_name))
 
-                # 2. Consultar proyecciones guardadas en MySQL
+                # 2. Leer Proyecciones desde tu tabla excel_projections_raw
                 query_projs = """
-                    SELECT * FROM excel_projections_raw 
+                    SELECT year, growth_rate, ebit_margin 
+                    FROM excel_projections_raw 
                     WHERE company_name = %s AND scenario_name = %s
                     ORDER BY id ASC
                 """
                 df_db_projs = pd.read_sql(query_projs, con=engine, params=(company_name, scenario_name))
 
                 if not df_db_inputs.empty and not df_db_projs.empty:
-                    # Mapear los inputs leídos de MySQL
-                    # (Asegúrate de ajustar los nombres de columna a como están guardados en tu tabla)
-                    inputs_dict = dict(zip(df_db_inputs["parametro"], df_db_inputs["valor"]))
+                    # Crear diccionario con mayúsculas/minúsculas tolerantes
+                    inputs_dict = dict(zip(
+                        df_db_inputs["Parametro"].astype(str).str.strip(), 
+                        df_db_inputs["Valor"]
+                    ))
 
+                    # Extraer valores de los inputs guardados
                     db_historical_revenue = float(inputs_dict.get("historical_revenue", historical_revenue))
                     db_tax_rate = float(inputs_dict.get("tax_rate", tax_rate))
                     db_capex = float(inputs_dict.get("capex_percent", capex_percent))
@@ -234,10 +246,11 @@ def render():
                     db_g = float(inputs_dict.get("terminal_growth_rate", terminal_growth_rate))
                     db_debt = float(inputs_dict.get("net_debt", net_debt))
 
+                    # Extraer proyecciones guardadas
                     db_growth_rates = [float(x) for x in df_db_projs["growth_rate"].tolist()]
                     db_ebit_margins = [float(x) for x in df_db_projs["ebit_margin"].tolist()]
 
-                    # Recalcular la valoración usando estrictamente la data de MySQL
+                    # Ejecutar DCF usando 100% los datos de MySQL
                     results_db = DCFController.run_valuation(
                         historical_revenue=db_historical_revenue,
                         growth_rates=db_growth_rates,
@@ -251,7 +264,7 @@ def render():
                         net_debt=db_debt
                     )
 
-                    # Mostrar Métricas desde MySQL
+                    # Renderizar métricas
                     col_res1, col_res2, col_res3 = st.columns(3)
                     col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
                     col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
@@ -259,7 +272,7 @@ def render():
 
                     st.markdown("---")
 
-                    # Construir la tabla FCFF usando los datos traídos de MySQL
+                    # Construir tabla FCFF dinámicamente desde MySQL
                     df_projections = pd.DataFrame({
                         "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
                         "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
@@ -277,14 +290,14 @@ def render():
                         "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
                     }), use_container_width=True)
 
-                    # Guardar en session_state para que la Pestaña 3 (Gráficos) use estos mismos datos
+                    # Guardar la serie para el gráfico de la Pestaña 3
                     st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
 
                 else:
-                    st.warning(f"⚠️ No se encontraron registros en MySQL para la empresa '{company_name}' y escenario '{scenario_name}'. Inserta los datos desde la Pestaña 1 o cambia los nombres en el menú lateral.")
+                    st.warning(f"⚠️ No hay datos guardados en MySQL para '{company_name}' / '{scenario_name}'.")
 
             except Exception as db_err:
-                st.error(f"❌ Error al consultar la base de datos MySQL: {db_err}")
+                st.error(f"❌ Error al consultar MySQL: {db_err}")
 
 
         # =========================================================================
