@@ -1,5 +1,6 @@
 #modules/mod_dcf.py
 import io
+import os
 import re
 import unicodedata
 import mysql.connector
