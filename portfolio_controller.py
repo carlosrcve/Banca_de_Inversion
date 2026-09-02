@@ -13,15 +13,13 @@ class PortfolioController:
 
     @staticmethod
     def save_market_quote(symbol, asset_name, asset_type, price, change_percent):
-        """Guarda o actualiza una cotización de mercado usando conexión nativa."""
+        """Guarda una cotización de mercado y retorna el error si falla."""
         conn = get_db_connection()
         if not conn:
-            print("❌ Error: No se pudo obtener la conexión a la base de datos.")
-            return False
+            return False, "No se pudo establecer la conexión con la base de datos."
 
         try:
             cursor = conn.cursor()
-            # Omitimos currency y recorded_at porque la tabla solo usa estas 5 columnas + id y created_at por defecto
             query = """
                 INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
                 VALUES (%s, %s, %s, %s, %s)
@@ -31,8 +29,9 @@ class PortfolioController:
             conn.commit()
             cursor.close()
             conn.close()
-            return True
+            return True, ""
         except Exception as e:
+            error_msg = str(e)
             print(f"❌ ERROR DETALLADO AL INSERTAR EN market_quotes: {repr(e)}")
             if conn:
                 try:
@@ -40,7 +39,7 @@ class PortfolioController:
                 except Exception:
                     pass
                 conn.close()
-            return False
+            return False, error_msg
             
     @staticmethod
     def create_portfolio(

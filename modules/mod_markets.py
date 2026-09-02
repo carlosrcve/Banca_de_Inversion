@@ -191,12 +191,13 @@ def render():
         st.metric(selected_metal_name, f"${m_price:,.2f}", f"{m_chg:+.2f}%")
 
         if st.button(f"💾 Guardar {selected_metal_name}", key="save_metal_btn"):
-            if PortfolioController.save_market_quote(
+            success, err_msg = PortfolioController.save_market_quote(
                 metal_ticker, selected_metal_name, "Commodity", m_price, m_chg
-            ):
+            )
+            if success:
                 st.success(f"✅ {selected_metal_name} guardado en TiDB.")
             else:
-                st.error("❌ Error al guardar en TiDB.")
+                st.error(f"❌ Error al guardar: {err_msg}")
 
     # -------------------------------------------------------------------------
     # 2. CATEGORÍA ÍNDICES GLOBALES / MERCADOS
