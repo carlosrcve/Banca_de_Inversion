@@ -201,14 +201,13 @@ def render():
         )
 
         # TAB 2
-        # En Tab 2:
         with tab2:
             st.header("📊 Resultados de Valoración (Leídos desde MySQL)")
 
             try:
                 engine = get_sqlalchemy_engine()
 
-                # 1. Traer todo de excel_inputs_raw para evitar errores de case-sensitivity en los nombres de columnas
+                # 1. Traer todo de excel_inputs_raw
                 query_inputs = """
                     SELECT * 
                     FROM excel_inputs_raw 
@@ -225,21 +224,19 @@ def render():
                 df_db_projs = pd.read_sql(query_projs, con=engine, params=(company_name, scenario_name))
 
                 if not df_db_inputs.empty and not df_db_projs.empty:
-                    # Estandarizar nombres de columnas a minúsculas
-                    df_db_inputs.columns = [str(c).lower() for c in df_db_inputs.columns]
-                    df_db_projs.columns = [str(c).lower() for c in df_db_projs.columns]
+                    # Normalizar nombres de columnas (minusculas y sin espacios extra)
+                    df_db_inputs.columns = [str(c).strip().lower() for c in df_db_inputs.columns]
+                    df_db_projs.columns = [str(c).strip().lower() for c in df_db_projs.columns]
 
-                    # Identificar la columna que contiene la clave y la que contiene el valor
-                    col_param = next((c for c in df_db_inputs.columns if c in ["parametro", "variable", "concepto", "key"]), df_db_inputs.columns[0])
-                    col_val = next((c for c in df_db_inputs.columns if c in ["valor", "value", "monto"]), df_db_inputs.columns[1] if len(df_db_inputs.columns) > 1 else df_db_inputs.columns[0])
+                    # --- Detección dinámica de columnas en INPUTS ---
+                    col_param = next((c for c in df_db_inputs.columns if any(k in c for k in ["param", "variable", "concepto"])), df_db_inputs.columns[0])
+                    col_val = next((c for c in df_db_inputs.columns if any(k in c for k in ["valor", "val", "monto"])), df_db_inputs.columns[1] if len(df_db_inputs.columns) > 1 else df_db_inputs.columns[0])
 
-                    # Crear el diccionario de inputs
                     inputs_dict = dict(zip(
-                        df_db_inputs[col_param].astype(str).str.strip(), 
+                        df_db_inputs[col_param].astype(str).str.strip().str.lower(), 
                         df_db_inputs[col_val]
                     ))
 
-                    # Extraer valores para el cálculo DCF
                     db_historical_revenue = float(inputs_dict.get("historical_revenue", historical_revenue))
                     db_tax_rate = float(inputs_dict.get("tax_rate", tax_rate))
                     db_capex = float(inputs_dict.get("capex_percent", capex_percent))
@@ -249,55 +246,65 @@ def render():
                     db_g = float(inputs_dict.get("terminal_growth_rate", terminal_growth_rate))
                     db_debt = float(inputs_dict.get("net_debt", net_debt))
 
-                    # Ordenar proyecciones si existe la columna 'year'
-                    if "year" in df_db_projs.columns:
-                        df_db_projs = df_db_projs.sort_values(by="year")
+                    # --- Detección dinámica de columnas en PROYECCIONES ---
+                    # Identificar la columna de Tasa de Crecimiento
+                    col_growth = next((c for c in df_db_projs.columns if any(k in c for k in ["growth", "crecimiento", "growth_rate", "rate"])), None)
+                    # Identificar la columna de Margen EBIT
+                    col_ebit = next((c for c in df_db_projs.columns if any(k in c for k in ["ebit", "margin", "margen"])), None)
 
-                    db_growth_rates = [float(x) for x in df_db_projs["growth_rate"].tolist()]
-                    db_ebit_margins = [float(x) for x in df_db_projs["ebit_margin"].tolist()]
+                    if not col_growth or not col_ebit:
+                        st.error(f"❌ No se identificaron las columnas de proyecciones en MySQL. Columnas encontradas: {list(df_db_projs.columns)}")
+                    else:
+                        # Ordenar por año si existe la columna
+                        col_year = next((c for c in df_db_projs.columns if "year" in c or "año" in c or "id" in c), None)
+                        if col_year:
+                            df_db_projs = df_db_projs.sort_values(by=col_year)
 
-                    # Ejecutar modelo DCF
-                    results_db = DCFController.run_valuation(
-                        historical_revenue=db_historical_revenue,
-                        growth_rates=db_growth_rates,
-                        ebit_margins=db_ebit_margins,
-                        tax_rate=db_tax_rate,
-                        capex_percent=db_capex,
-                        nwc_percent=db_nwc,
-                        da_percent=db_da,
-                        wacc=db_wacc,
-                        terminal_growth_rate=db_g,
-                        net_debt=db_debt
-                    )
+                        db_growth_rates = [float(x) for x in df_db_projs[col_growth].tolist()]
+                        db_ebit_margins = [float(x) for x in df_db_projs[col_ebit].tolist()]
 
-                    # Métricas
-                    col_res1, col_res2, col_res3 = st.columns(3)
-                    col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
-                    col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
-                    col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
+                        # Ejecutar modelo DCF
+                        results_db = DCFController.run_valuation(
+                            historical_revenue=db_historical_revenue,
+                            growth_rates=db_growth_rates,
+                            ebit_margins=db_ebit_margins,
+                            tax_rate=db_tax_rate,
+                            capex_percent=db_capex,
+                            nwc_percent=db_nwc,
+                            da_percent=db_da,
+                            wacc=db_wacc,
+                            terminal_growth_rate=db_g,
+                            net_debt=db_debt
+                        )
 
-                    st.markdown("---")
+                        # Métricas
+                        col_res1, col_res2, col_res3 = st.columns(3)
+                        col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
+                        col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
+                        col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
 
-                    # Tabla FCFF
-                    df_projections = pd.DataFrame({
-                        "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
-                        "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
-                        "Margen EBIT (%)": [m * 100 for m in db_ebit_margins],
-                        "Ingresos Proyectados ($)": results_db.projected_revenues,
-                        "EBIT ($)": results_db.projected_ebit,
-                        "NOPAT ($)": results_db.projected_nopat,
-                        "Flujo Caja Libre (FCF) ($)": results_db.free_cash_flows,
-                        "PV FCF ($)": results_db.pv_cash_flows,
-                    })
+                        st.markdown("---")
 
-                    st.dataframe(df_projections.style.format({
-                        "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
-                        "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
-                        "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
-                    }), use_container_width=True)
+                        # Tabla FCFF
+                        df_projections = pd.DataFrame({
+                            "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
+                            "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
+                            "Margen EBIT (%)": [m * 100 for m in db_ebit_margins],
+                            "Ingresos Proyectados ($)": results_db.projected_revenues,
+                            "EBIT ($)": results_db.projected_ebit,
+                            "NOPAT ($)": results_db.projected_nopat,
+                            "Flujo Caja Libre (FCF) ($)": results_db.free_cash_flows,
+                            "PV FCF ($)": results_db.pv_cash_flows,
+                        })
 
-                    # Actualizar gráfico para la Pestaña 3
-                    st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
+                        st.dataframe(df_projections.style.format({
+                            "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
+                            "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
+                            "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
+                        }), use_container_width=True)
+
+                        # Actualizar gráfico para la Pestaña 3
+                        st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
 
                 else:
                     st.warning(f"⚠️ No se encontraron registros en MySQL para '{company_name}' / '{scenario_name}'.")
