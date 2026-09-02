@@ -43,25 +43,23 @@ def get_db_credentials() -> dict:
 
 
 def get_db_connection():
-    """Establece la conexión con mysql.connector."""
+    """Establece conexión nativa con TiDB Cloud usando SSL."""
     try:
-        creds = get_db_credentials()
-        config = {
-            "host": creds["host"],
-            "user": creds["user"],
-            "password": creds["password"],
-            "database": creds["database"],
-            "port": creds["port"],
-            "autocommit": False,
-        }
-
-        if "tidbcloud.com" in creds["host"] or creds["port"] == 4000:
-            config["ssl_verify_cert"] = True
-            config["ssl_verify_identity"] = True
-
-        return mysql.connector.connect(**config)
-    except Error as e:
-        print(f"Error al conectar a MySQL: {e}")
+        # TiDB Cloud requiere obligatoriamente un contexto SSL seguro
+        ssl_context = ssl.create_default_context()
+        
+        connection = pymysql.connect(
+            host="gateway01.us-east-1.prod.aws.tidbcloud.com",
+            port=4000,
+            user="4K4VAw4t4ZPFUTF.root",
+            password="I1lVZQDq2d4KJbQA",
+            database="valuations_db",
+            ssl=ssl_context,
+            connect_timeout=10
+        )
+        return connection
+    except Exception as e:
+        print(f"❌ ERROR CRÍTICO DE CONEXIÓN A TIDB: {repr(e)}")
         return None
 
 
