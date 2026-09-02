@@ -3,6 +3,20 @@ import streamlit as st
 import yfinance as yf
 from portfolio_controller import PortfolioController
 
+
+def get_ticker_snapshot(symbol: str):
+    """Función auxiliar para obtener precio y cambio porcentual de forma segura."""
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.fast_info
+        price = info.get("lastPrice", 0.0) or 0.0
+        prev = info.get("previousClose", price) or price
+        change_pct = ((price - prev) / prev * 100) if prev else 0.0
+        return price, change_pct
+    except Exception:
+        return 0.0, 0.0
+
+
 def render():
     st.title("📈 Análisis de Mercados & Clases de Activos Globales")
     st.markdown("""
@@ -12,15 +26,12 @@ def render():
 
     col_m1, col_m2, col_m3 = st.columns(3)
 
+    # -------------------------------------------------------------------------
+    # 1. TARJETAS MÉTRICAS PRINCIPALES
+    # -------------------------------------------------------------------------
     with col_m1:
         st.subheader("🟡 Oro (Gold Spot)")
-        gold_ticker = yf.Ticker("GC=F")
-        gold_info = gold_ticker.fast_info
-        gold_price = gold_info.get("lastPrice", 0.0)
-        gold_prev = gold_info.get("previousClose", gold_price)
-        gold_chg = (
-            ((gold_price - gold_prev) / gold_prev * 100) if gold_prev else 0.0
-        )
+        gold_price, gold_chg = get_ticker_snapshot("GC=F")
         st.metric(
             "Precio Futuros Oro ($/oz)",
             f"${gold_price:,.2f}",
@@ -35,18 +46,10 @@ def render():
                 st.error("❌ Error al guardar en TiDB.")
 
     with col_m2:
-        st.subheader("💻 Nasdaq 100 Index")
-        nasdaq_ticker = yf.Ticker("^IXIC")
-        nasdaq_info = nasdaq_ticker.fast_info
-        nasdaq_price = nasdaq_info.get("lastPrice", 0.0)
-        nasdaq_prev = nasdaq_info.get("previousClose", nasdaq_price)
-        nasdaq_chg = (
-            ((nasdaq_price - nasdaq_prev) / nasdaq_prev * 100)
-            if nasdaq_prev
-            else 0.0
-        )
+        st.subheader("💻 Nasdaq Composite")
+        nasdaq_price, nasdaq_chg = get_ticker_snapshot("^IXIC")
         st.metric(
-            "S&P / Nasdaq Composite",
+            "Nasdaq Composite Index",
             f"{nasdaq_price:,.2f} pts",
             f"{nasdaq_chg:+.2f}%",
         )
@@ -60,13 +63,7 @@ def render():
 
     with col_m3:
         st.subheader("🍎 Apple Inc. (AAPL)")
-        aapl_ticker = yf.Ticker("AAPL")
-        aapl_info = aapl_ticker.fast_info
-        aapl_price = aapl_info.get("lastPrice", 0.0)
-        aapl_prev = aapl_info.get("previousClose", aapl_price)
-        aapl_chg = (
-            ((aapl_price - aapl_prev) / aapl_prev * 100) if aapl_prev else 0.0
-        )
+        aapl_price, aapl_chg = get_ticker_snapshot("AAPL")
         st.metric("Acción AAPL ($)", f"${aapl_price:,.2f}", f"{aapl_chg:+.2f}%")
         if st.button("💾 Guardar AAPL en TiDB", key="save_aapl"):
             if PortfolioController.save_market_quote(
@@ -77,18 +74,24 @@ def render():
                 st.error("❌ Error al guardar en TiDB.")
 
     st.markdown("---")
+
+    # -------------------------------------------------------------------------
+    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS
+    # -------------------------------------------------------------------------
     st.subheader("🔍 Buscador e Histórico de Activos Financieros")
 
-    symbol = st.text_input(
-        "Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, NVDA, TSLA, GC=F,"
-        " ^IXIC, BTC-USD):",
-        value="NVDA",
-    ).upper()
-    period = st.selectbox(
-        "Rango de Tiempo",
-        ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
-        index=3,
-    )
+    col_search1, col_search2 = st.columns([3, 1])
+    with col_search1:
+        symbol = st.text_input(
+            "Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, NVDA, TSLA, GC=F, ^IXIC, BTC-USD):",
+            value="NVDA",
+        ).strip().upper()
+    with col_search2:
+        period = st.selectbox(
+            "Rango de Tiempo",
+            ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
+            index=3,
+        )
 
     if symbol:
         try:
@@ -96,14 +99,7 @@ def render():
             df_hist = asset.history(period=period)
 
             if not df_hist.empty:
-                info = asset.fast_info
-                curr_price = info.get("lastPrice", 0.0)
-                prev_price = info.get("previousClose", curr_price)
-                chg_pct = (
-                    ((curr_price - prev_price) / prev_price * 100)
-                    if prev_price
-                    else 0.0
-                )
+                curr_price, chg_pct = get_ticker_snapshot(symbol)
 
                 st.write(f"### Evolución del Precio: **{symbol}**")
                 st.line_chart(df_hist["Close"])
@@ -129,7 +125,7 @@ def render():
                         "Tipo de Activo",
                         ["Equity", "Commodity", "Index", "Crypto", "FX"],
                     )
-                    if st.button(f"💾 Guardar {symbol} en TiDB"):
+                    if st.button(f"💾 Guardar {symbol} en TiDB", key="save_search_asset"):
                         if PortfolioController.save_market_quote(
                             symbol,
                             symbol,
@@ -141,15 +137,17 @@ def render():
                         else:
                             st.error("❌ Error al guardar en TiDB.")
             else:
-                st.warning(
-                    f"No se encontraron datos para el símbolo '{symbol}'."
-                )
+                st.warning(f"⚠️ No se encontraron datos para el símbolo '{symbol}'. Verifique la nomenclatura.")
         except Exception as err:
-            st.error(f"Error al obtener los datos de mercado: {err}")
+            st.error(f"❌ Error al obtener los datos de mercado: {err}")
 
     st.markdown("---")
+
+    # -------------------------------------------------------------------------
+    # 3. HISTORIAL DE COTIZACIONES EN TiDB
+    # -------------------------------------------------------------------------
     st.subheader("📋 Historial de Cotizaciones Registradas en TiDB")
-    if st.button("🔄 Cargar Cotizaciones de la Base de Datos"):
+    if st.button("🔄 Cargar / Refrescar Cotizaciones de la BD"):
         quotes = PortfolioController.get_market_quotes()
         if quotes:
             df_quotes = pd.DataFrame(quotes)
@@ -161,4 +159,4 @@ def render():
                 use_container_width=True,
             )
         else:
-            st.info("No hay cotizaciones guardadas aún en TiDB Cloud.")
+            st.info("ℹ️ No hay cotizaciones guardadas aún en TiDB Cloud.")
