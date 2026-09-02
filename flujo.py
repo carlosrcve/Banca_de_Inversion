@@ -88,3 +88,10 @@ git push origin main
 git add requirements.txt
 git commit -m "Fix: Add sqlalchemy and pymysql to requirements.txt"
 git push origin main
+
+
+cd "C:\Users\Carlos Rodriguez\Desktop\Banca_de_Inversion"
+git add dcf_controller.py
+git add modules/mod_dcf.py
+git commit -m "Fix: Unified database credentials handling and SQLAlchemy engine for TiDB Cloud"
+git push origin main

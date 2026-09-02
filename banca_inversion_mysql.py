@@ -149,3 +149,78 @@ CREATE TABLE dcf_assumptions (
     
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
 );
+
+
+
+
+USE valuations_db;
+
+DROP TABLE IF EXISTS excel_inputs_raw;
+DROP TABLE IF EXISTS excel_projections_raw;
+
+CREATE TABLE IF NOT EXISTS excel_inputs_raw (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_name VARCHAR(150),
+    scenario_name VARCHAR(100),
+    Parametro VARCHAR(255),
+    Valor VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS excel_projections_raw (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_name VARCHAR(150),
+    scenario_name VARCHAR(100),
+    year INT,
+    growth_rate DECIMAL(10, 4),
+    ebit_margin DECIMAL(10, 4),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
+USE valuations_db;
+
+-- 1. Crear tabla Padre
+CREATE TABLE IF NOT EXISTS dcf_valuations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    company_name VARCHAR(255) NOT NULL,
+    historical_revenue DECIMAL(18,2) NOT NULL,
+    wacc DECIMAL(10,4) NOT NULL,
+    terminal_growth_rate DECIMAL(10,4) NOT NULL,
+    net_debt DECIMAL(18,2) NOT NULL,
+    enterprise_value DECIMAL(18,2) NOT NULL,
+    equity_value DECIMAL(18,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Crear tabla Hija (Detalle FCFF)
+CREATE TABLE IF NOT EXISTS dcf_projections (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    valuation_id INT NOT NULL,
+    year_index INT NOT NULL,
+    year_label VARCHAR(20) NOT NULL,
+    growth_rate DECIMAL(10,4),
+    ebit_margin DECIMAL(10,4),
+    projected_revenue DECIMAL(18,2) NOT NULL,
+    ebit DECIMAL(18,2) NOT NULL,
+    nopat DECIMAL(18,2) NOT NULL,
+    da DECIMAL(18,2) NOT NULL,
+    capex DECIMAL(18,2) NOT NULL,
+    nwc_change DECIMAL(18,2) NOT NULL,
+    fcf DECIMAL(18,2) NOT NULL,
+    pv_fcf DECIMAL(18,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (valuation_id) REFERENCES dcf_valuations(id) ON DELETE CASCADE
+);
+
+
+USE valuations_db;
+CREATE TABLE IF NOT EXISTS documentos_cloud (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    empresa_db VARCHAR(100) NOT NULL,
+    categoria VARCHAR(100) NOT NULL,
+    nombre_archivo VARCHAR(255) NOT NULL,
+    ruta_archivo TEXT NOT NULL,
+    fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
