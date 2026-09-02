@@ -1,4 +1,3 @@
-#mod_dcf.py
 import re
 import unicodedata
 import pandas as pd
@@ -242,7 +241,7 @@ def render():
                     WHERE company_name = :company AND scenario_name = :scenario
                     ORDER BY id ASC
                 """)
-                
+
                 query_projs = text("""
                     SELECT year, growth_rate, ebit_margin 
                     FROM excel_projections_raw 
@@ -315,7 +314,7 @@ def render():
 
                 else:
                     st.warning(f"⚠️ No hay registros en MySQL para '{company_name}' / '{scenario_name}'. Se muestran los cálculos locales:")
-                    
+
                     col_res1, col_res2, col_res3 = st.columns(3)
                     col_res1.metric("🏢 Enterprise Value (EV)", f"${results.enterprise_value:,.2f}")
                     col_res2.metric("💵 Equity Value (Patrimonio)", f"${results.equity_value:,.2f}")
@@ -335,7 +334,7 @@ def render():
                     "Año": [f"Año {i+1}" for i in range(len(pv_flows))],
                     "PV FCF ($)": [float(val) for val in pv_flows],
                 }).set_index("Año")
-                
+
                 st.bar_chart(df_chart)
             else:
                 st.info("Carga o consulta un escenario para visualizar el gráfico.")
@@ -344,7 +343,7 @@ def render():
         with tab4:
             st.header("💾 Gestión de Escenarios")
             col_btn, col_history = st.columns([1, 2])
-            
+
             with col_btn:
                 if st.button("💾 Guardar en Base de Datos", type="primary"):
                     try:
@@ -364,7 +363,7 @@ def render():
                                 "net_debt": net_debt
                             }])
                             df_summary.to_sql("dcf_valuations", con=engine, if_exists="append", index=False)
-                            st.success(f"✅ Guardado alternativo en 'dcf_valuations' realizado.")
+                            st.success("✅ Guardado alternativo en 'dcf_valuations' realizado.")
                         except Exception as err:
                             st.error(f"❌ Error al guardar en MySQL: {err}")
 
