@@ -1,11 +1,23 @@
+#mod_dcf.py
 import re
 import unicodedata
 import pandas as pd
 import streamlit as st
+from sqlalchemy import create_engine
 
-# Mover todas las importaciones del módulo DCF aquí arriba
+# Importaciones del módulo controller
 from dcf_controller import DCFController, get_sqlalchemy_engine
 from dcf_models import DCFInputs
+
+
+def clean_column_name(col_name: str) -> str:
+    """Limpia acentos, caracteres especiales y espacios para nombres SQL válidos."""
+    col = str(col_name).strip()
+    col = unicodedata.normalize("NFKD", col).encode("ASCII", "ignore").decode("utf-8")
+    col = re.sub(r"[^a-zA-Z0-9]+", "_", col)
+    col = re.sub(r"_+", "_", col).strip("_").lower()
+    return col if col else "columna_sin_nombre"
+
 
 def render():
     st.title("📊 Modelo de Valoración por Flujo de Caja Descontado (DCF)")
@@ -32,9 +44,7 @@ def render():
     default_g = 0.025
     default_debt = 200000.0
 
-    # -------------------------------------------------------------------------
-    # MENÚ HORIZONTAL MEDIANTE PESTAÑAS (ST.TABS)
-    # -------------------------------------------------------------------------
+    # Pestañas
     tab1, tab2, tab3, tab4 = st.tabs([
         "📥 1. Cargar Excel", 
         "📊 2. Resultados & FCFF", 
@@ -43,63 +53,30 @@ def render():
     ])
 
     # =========================================================================
-    # TABLA / PESTAÑA 1: CARGA DE ARCHIVOS EXCEL E INSERCIÓN A MYSQL
-    # ========================================================================
-    def clean_column_name(col_name: str) -> str:
-        """Limpia acentos, caracteres especiales, parentesis y espacios
-
-        para generar nombres de columnas 100% compatibles con SQL.
-        """
-        col = str(col_name).strip()
-        col = unicodedata.normalize("NFKD", col).encode("ASCII", "ignore").decode("utf-8")
-        col = re.sub(r"[^a-zA-Z0-9]+", "_", col)
-        col = re.sub(r"_+", "_", col).strip("_").lower()
-        return col if col else "columna_sin_nombre"
-
-
+    # PESTAÑA 1: CARGA DE EXCEL
+    # =========================================================================
     with tab1:
         st.header("📥 Cargar Modelo desde Excel")
-        st.markdown("""
-        Sube la plantilla de Excel con las pestañas de **Inputs** y **Projections** para auto-completar los parámetros del modelo.
-        """)
-
-        uploaded_file = st.file_uploader(
-            "Subir archivo .xlsx / .xls",
-            type=["xlsx", "xls"],
-            key="excel_uploader_main",
-        )
+        uploaded_file = st.file_uploader("Subir archivo .xlsx / .xls", type=["xlsx", "xls"], key="excel_uploader_main")
 
         if uploaded_file is not None:
             try:
                 excel_file = pd.ExcelFile(uploaded_file)
                 sheet_names = excel_file.sheet_names
-
                 inputs_sheet = "Inputs" if "Inputs" in sheet_names else sheet_names[0]
 
-                # Detectar si la fila 0 trae columnas 'Unnamed'
                 df_inputs = pd.read_excel(excel_file, sheet_name=inputs_sheet)
                 if str(df_inputs.columns[0]).startswith("Unnamed"):
                     df_inputs = pd.read_excel(excel_file, sheet_name=inputs_sheet, header=1)
 
                 df_inputs = df_inputs.dropna(how="all")
 
-                param_col, val_col = None, None
-                for col in df_inputs.columns:
-                    col_clean = clean_column_name(col)
-                    if col_clean in ["parametro", "parametros", "variable", "variables", "concept", "concepto", "key"]:
-                        param_col = col
-                    elif col_clean in ["valor", "valores", "value", "values", "monto", "monto_mensual"]:
-                        val_col = col
+                param_col = next((c for c in df_inputs.columns if clean_column_name(c) in ["parametro", "parametros", "variable", "concept", "concepto", "key"]), df_inputs.columns[0])
+                val_col = next((c for c in df_inputs.columns if clean_column_name(c) in ["valor", "valores", "value", "monto", "monto_mensual"]), df_inputs.columns[1] if len(df_inputs.columns) > 1 else df_inputs.columns[0])
 
-                if not param_col:
-                    param_col = df_inputs.columns[0]
-                if not val_col:
-                    val_col = df_inputs.columns[1] if len(df_inputs.columns) > 1 else df_inputs.columns[0]
-
-                # Diccionario de parámetros
                 inputs_dict = dict(zip(df_inputs[param_col].astype(str).str.strip(), df_inputs[val_col]))
 
-                # Persistir valores dinámicamente en session_state
+                # Guardar en session_state
                 st.session_state["company_name"] = str(inputs_dict.get("company_name", default_company))
                 st.session_state["scenario_name"] = str(inputs_dict.get("scenario_name", default_scenario))
                 st.session_state["historical_revenue"] = float(inputs_dict.get("historical_revenue", default_revenue))
@@ -111,19 +88,12 @@ def render():
                 st.session_state["terminal_growth_rate"] = float(inputs_dict.get("terminal_growth_rate", default_g))
                 st.session_state["net_debt"] = float(inputs_dict.get("net_debt", default_debt))
 
-                proj_sheet = (
-                    "Projections"
-                    if "Projections" in sheet_names
-                    else (sheet_names[1] if len(sheet_names) > 1 else sheet_names[0])
-                )
-
+                proj_sheet = "Projections" if "Projections" in sheet_names else (sheet_names[1] if len(sheet_names) > 1 else sheet_names[0])
                 df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet)
                 if str(df_projs.columns[0]).startswith("Unnamed"):
                     df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet, header=1)
 
                 df_projs = df_projs.dropna(how="all")
-
-                # Normalizar columnas de proyecciones
                 df_projs.columns = [clean_column_name(col) for col in df_projs.columns]
 
                 if "growth_rate" in df_projs.columns and "ebit_margin" in df_projs.columns:
@@ -133,93 +103,64 @@ def render():
 
                 st.session_state.df_excel_inputs = df_inputs
                 st.session_state.df_excel_projs = df_projs
-
                 st.success(f"✅ Archivo cargado correctamente ({inputs_sheet} / {proj_sheet})")
 
             except Exception as e:
                 st.error(f"❌ Error al procesar Excel: {e}")
 
-        # Guardar data cruda en MySQL desde tab1
         if st.session_state.get("df_excel_inputs") is not None or st.session_state.get("df_excel_projs") is not None:
             st.markdown("---")
             if st.button("💾 Insertar Data Cruda de Excel en MySQL", type="primary"):
                 try:
-                    from dcf_controller import get_sqlalchemy_engine
-
                     engine = get_sqlalchemy_engine()
 
-                    # 1. Procesar y guardar df_excel_inputs
                     if st.session_state.df_excel_inputs is not None:
                         df_inp = st.session_state.df_excel_inputs.copy()
-
-                        # Limpiar nombres de columnas para compatibilidad SQL
                         df_inp.columns = [clean_column_name(col) for col in df_inp.columns]
-
-                        # Convertir formato numérico (comas decimales a puntos)
                         for col in df_inp.columns:
                             if df_inp[col].dtype == "object":
                                 df_inp[col] = df_inp[col].astype(str).str.replace(",", ".", regex=False)
+                        df_inp["company_name"] = st.session_state.get("company_name", default_company)
+                        df_inp["scenario_name"] = st.session_state.get("scenario_name", default_scenario)
+                        df_inp.to_sql("excel_inputs_raw", con=engine, if_exists="append", index=False)
 
-                        df_inp["company_name"] = default_company
-                        df_inp["scenario_name"] = default_scenario
-
-                        # Se utiliza replace para evitar descalces en la definición previa de columnas
-                        df_inp.to_sql("excel_inputs_raw", con=engine, if_exists="replace", index=False)
-
-                    # 2. Procesar y guardar df_excel_projs
                     if st.session_state.df_excel_projs is not None:
                         df_proj = st.session_state.df_excel_projs.copy()
-
                         df_proj.columns = [clean_column_name(col) for col in df_proj.columns]
-
                         for col in df_proj.columns:
                             if df_proj[col].dtype == "object":
                                 df_proj[col] = df_proj[col].astype(str).str.replace(",", ".", regex=False)
+                        df_proj["company_name"] = st.session_state.get("company_name", default_company)
+                        df_proj["scenario_name"] = st.session_state.get("scenario_name", default_scenario)
+                        df_proj.to_sql("excel_projections_raw", con=engine, if_exists="append", index=False)
 
-                        df_proj["company_name"] = default_company
-                        df_proj["scenario_name"] = default_scenario
-
-                        df_proj.to_sql("excel_projections_raw", con=engine, if_exists="replace", index=False)
-
-                    st.success("✅ ¡Toda la data del Excel fue limpiada e insertada en MySQL!")
+                    st.success("✅ ¡Data insertada en MySQL correctamente!")
                 except Exception as err:
                     st.error(f"❌ Error en INSERT INTO MySQL: {err}")
+
     # -------------------------------------------------------------------------
     # CONTROLES SIDEBAR
     # -------------------------------------------------------------------------
     st.sidebar.header("📌 Parámetros Generales")
-    company_name = st.sidebar.text_input("Nombre de la Empresa", value=default_company)
-    scenario_name = st.sidebar.text_input("Nombre del Escenario", value=default_scenario)
+    company_name = st.sidebar.text_input("Nombre de la Empresa", value=st.session_state.get("company_name", default_company))
+    scenario_name = st.sidebar.text_input("Nombre del Escenario", value=st.session_state.get("scenario_name", default_scenario))
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("📈 Datos Financieros Iniciales")
-
-    historical_revenue = st.sidebar.number_input(
-        "Ingresos del Último Año ($)",
-        min_value=0.0,
-        value=default_revenue,
-        step=50000.0,
-        format="%.2f",
-    )
-
-    num_years = st.sidebar.slider("Años de Proyección", min_value=3, max_value=10, value=default_years)
+    historical_revenue = st.sidebar.number_input("Ingresos del Último Año ($)", min_value=0.0, value=st.session_state.get("historical_revenue", default_revenue), step=50000.0, format="%.2f")
+    num_years = st.sidebar.slider("Años de Proyección", min_value=3, max_value=10, value=st.session_state.get("proj_years", default_years))
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("🎯 Proyecciones Detalladas por Año")
 
-    growth_rates = []
-    ebit_margins = []
-
-    cols_years = st.sidebar.columns(2)
-    with cols_years[0]:
-        st.caption("Crecimiento (%)")
-    with cols_years[1]:
-        st.caption("Margen EBIT (%)")
+    growth_rates, ebit_margins = [], []
+    saved_growth = st.session_state.get("growth_rates", default_growth)
+    saved_ebit = st.session_state.get("ebit_margins", default_ebit)
 
     for i in range(num_years):
         col1, col2 = st.sidebar.columns(2)
-        g_val = (default_growth[i] * 100) if i < len(default_growth) else 5.0
-        m_val = (default_ebit[i] * 100) if i < len(default_ebit) else 15.0
+        g_val = (saved_growth[i] * 100) if i < len(saved_growth) else 5.0
+        m_val = (saved_ebit[i] * 100) if i < len(saved_ebit) else 15.0
 
         with col1:
             g = col1.number_input(f"Año {i+1} Crec.", value=float(g_val), step=0.5, key=f"g_{i}") / 100.0
@@ -230,143 +171,40 @@ def render():
 
     st.sidebar.markdown("---")
     st.sidebar.subheader("⚙️ Supuestos Financieros & Tasa de Descuento")
-
-    tax_rate = st.sidebar.number_input("Tasa de Impuestos (%)", value=default_tax * 100, step=1.0) / 100.0
-    capex_percent = st.sidebar.number_input("CapEx / Ingresos (%)", value=default_capex * 100, step=0.5) / 100.0
-    nwc_percent = st.sidebar.number_input("Δ NWC / Ingresos (%)", value=default_nwc * 100, step=0.5) / 100.0
-    da_percent = st.sidebar.number_input("D&A / Ingresos (%)", value=default_da * 100, step=0.5) / 100.0
-    wacc = st.sidebar.number_input("WACC - Costo Promedio del Capital (%)", value=default_wacc * 100, step=0.5) / 100.0
-    terminal_growth_rate = st.sidebar.number_input("Tasa de Crecimiento Perpetua g (%)", value=default_g * 100, step=0.1) / 100.0
-    net_debt = st.sidebar.number_input("Deuda Neta ($)", value=default_debt, step=10000.0)
+    tax_rate = st.sidebar.number_input("Tasa de Impuestos (%)", value=st.session_state.get("tax_rate", default_tax) * 100, step=1.0) / 100.0
+    capex_percent = st.sidebar.number_input("CapEx / Ingresos (%)", value=st.session_state.get("capex_percent", default_capex) * 100, step=0.5) / 100.0
+    nwc_percent = st.sidebar.number_input("Δ NWC / Ingresos (%)", value=st.session_state.get("nwc_percent", default_nwc) * 100, step=0.5) / 100.0
+    da_percent = st.sidebar.number_input("D&A / Ingresos (%)", value=st.session_state.get("da_percent", default_da) * 100, step=0.5) / 100.0
+    wacc = st.sidebar.number_input("WACC (%)", value=st.session_state.get("wacc", default_wacc) * 100, step=0.5) / 100.0
+    terminal_growth_rate = st.sidebar.number_input("Tasa g (%)", value=st.session_state.get("terminal_growth_rate", default_g) * 100, step=0.1) / 100.0
+    net_debt = st.sidebar.number_input("Deuda Neta ($)", value=st.session_state.get("net_debt", default_debt), step=10000.0)
 
     # -------------------------------------------------------------------------
-    # EJECUCIÓN DEL MODELO DCF
+    # EJECUCIÓN Y TABLAS
     # -------------------------------------------------------------------------
     try:
-        results = DCFController.run_valuation(
-            historical_revenue=historical_revenue,
-            growth_rates=growth_rates,
-            ebit_margins=ebit_margins,
-            tax_rate=tax_rate,
-            capex_percent=capex_percent,
-            nwc_percent=nwc_percent,
-            da_percent=da_percent,
-            wacc=wacc,
-            terminal_growth_rate=terminal_growth_rate,
-            net_debt=net_debt,
-        )
-
         current_inputs = DCFInputs(
-            historical_revenue=historical_revenue,
-            growth_rates=growth_rates,
-            ebit_margins=ebit_margins,
-            tax_rate=tax_rate,
-            capex_percent=capex_percent,
-            nwc_percent=nwc_percent,
-            da_percent=da_percent,
-            wacc=wacc,
-            terminal_growth_rate=terminal_growth_rate,
-            net_debt=net_debt,
+            historical_revenue=historical_revenue, growth_rates=growth_rates, ebit_margins=ebit_margins,
+            tax_rate=tax_rate, capex_percent=capex_percent, nwc_percent=nwc_percent, da_percent=da_percent,
+            wacc=wacc, terminal_growth_rate=terminal_growth_rate, net_debt=net_debt
         )
 
-        years_labels = [f"Año {i+1}" for i in range(num_years)]
+        results = DCFController.run_valuation(
+            historical_revenue=historical_revenue, growth_rates=growth_rates, ebit_margins=ebit_margins,
+            tax_rate=tax_rate, capex_percent=capex_percent, nwc_percent=nwc_percent, da_percent=da_percent,
+            wacc=wacc, terminal_growth_rate=terminal_growth_rate, net_debt=net_debt
+        )
 
-        # =========================================================================
-        # TABLA / PESTAÑA 2: RESULTADOS Y FCFF
-        # =========================================================================
+        # TAB 2
         with tab2:
             st.header("📊 Resultados de Valoración y Tabla FCFF")
-
-            # --- Carga de datos directamente desde MySQL ---
-            db_growth_rates = None
-            db_ebit_margins = None
-            db_inputs_dict = {}
-
+            
+            # Consultar con dinámicos de empresa/escenario
             try:
-                # Usar la función ya importada al inicio del archivo
                 engine = get_sqlalchemy_engine()
-
-                # 1. Consultar inputs base desde MySQL
-                df_db_inputs = pd.read_sql(
-                    "SELECT * FROM excel_inputs_raw WHERE company_name = %s AND scenario_name = %s",
-                    con=engine,
-                    params=(default_company, default_scenario),
-                )
-
-                if not df_db_inputs.empty:
-                    col_p = (
-                        [c for c in df_db_inputs.columns if c in ["parametro", "concepto", "key", "variable"]][0]
-                        if any(c in df_db_inputs.columns for c in ["parametro", "concepto", "key", "variable"])
-                        else df_db_inputs.columns[0]
-                    )
-
-                    col_v = (
-                        [c for c in df_db_inputs.columns if c in ["valor", "monto", "monto_mensual"]][0]
-                        if any(c in df_db_inputs.columns for c in ["valor", "monto", "monto_mensual"])
-                        else df_db_inputs.columns[1]
-                    )
-
-                    db_inputs_dict = dict(zip(df_db_inputs[col_p].astype(str).str.strip(), df_db_inputs[col_v]))
-
-                # 2. Consultar proyecciones desde MySQL
-                df_db_projs = pd.read_sql(
-                    "SELECT * FROM excel_projections_raw WHERE company_name = %s AND scenario_name = %s",
-                    con=engine,
-                    params=(default_company, default_scenario),
-                )
-
-                if (
-                    not df_db_projs.empty
-                    and "growth_rate" in df_db_projs.columns
-                    and "ebit_margin" in df_db_projs.columns
-                ):
-                    db_growth_rates = [
-                        float(str(x).replace(",", ".")) for x in df_db_projs["growth_rate"].dropna().tolist()
-                    ]
-                    db_ebit_margins = [
-                        float(str(x).replace(",", ".")) for x in df_db_projs["ebit_margin"].dropna().tolist()
-                    ]
-
+                df_db_inputs = pd.read_sql("SELECT * FROM excel_inputs_raw WHERE company_name = %s AND scenario_name = %s", con=engine, params=(company_name, scenario_name))
             except Exception as db_err:
-                st.warning(f"⚠️ No se pudo consultar la base de datos (se usarán datos locales): {db_err}")
-
-            # Asignar variables activas priorizando MySQL > session_state > default
-            active_growth_rates = (
-                db_growth_rates
-                if db_growth_rates
-                else st.session_state.get("growth_rates", growth_rates)
-            )
-            active_ebit_margins = (
-                db_ebit_margins
-                if db_ebit_margins
-                else st.session_state.get("ebit_margins", ebit_margins)
-            )
-
-            rev_val = float(db_inputs_dict.get("historical_revenue", st.session_state.get("historical_revenue", default_revenue)))
-            tax_val = float(db_inputs_dict.get("tax_rate", st.session_state.get("tax_rate", default_tax)))
-            capex_val = float(db_inputs_dict.get("capex_percent", st.session_state.get("capex_percent", default_capex)))
-            nwc_val = float(db_inputs_dict.get("nwc_percent", st.session_state.get("nwc_percent", default_nwc)))
-            da_val = float(db_inputs_dict.get("da_percent", st.session_state.get("da_percent", default_da)))
-            wacc_val = float(db_inputs_dict.get("wacc", st.session_state.get("wacc", default_wacc)))
-            g_val = float(db_inputs_dict.get("terminal_growth_rate", st.session_state.get("terminal_growth_rate", default_g)))
-            debt_val = float(db_inputs_dict.get("net_debt", st.session_state.get("net_debt", default_debt)))
-
-            # Cálculo de valoración utilizando DCFController
-            results = DCFController.run_valuation(
-                historical_revenue=rev_val,
-                growth_rates=active_growth_rates,
-                ebit_margins=active_ebit_margins,
-                tax_rate=tax_val,
-                capex_percent=capex_val,
-                nwc_percent=nwc_val,
-                da_percent=da_val,
-                wacc=wacc_val,
-                terminal_growth_rate=g_val,
-                net_debt=debt_val,
-            )
-
-            active_years = len(active_growth_rates)
-            active_years_labels = [f"Año {i+1}" for i in range(active_years)]
+                st.warning(f"⚠️ Nota sobre DB local/remota: {db_err}")
 
             col_res1, col_res2, col_res3 = st.columns(3)
             col_res1.metric("🏢 Enterprise Value (EV)", f"${results.enterprise_value:,.2f}")
@@ -374,102 +212,62 @@ def render():
             col_res3.metric("🌐 Valor Presente TV", f"${results.pv_terminal_value:,.2f}")
 
             st.markdown("---")
-            st.subheader("📋 Tabla Proyectada de Flujos de Caja (FCFF)")
-
             df_projections = pd.DataFrame({
-                "Año": active_years_labels,
-                "Tasa Crec. (%)": [g * 100 if g <= 1 else g for g in active_growth_rates],
-                "Margen EBIT (%)": [m * 100 if m <= 1 else m for m in active_ebit_margins],
+                "Año": [f"Año {i+1}" for i in range(len(growth_rates))],
+                "Tasa Crec. (%)": [g * 100 for g in growth_rates],
+                "Margen EBIT (%)": [m * 100 for m in ebit_margins],
                 "Ingresos Proyectados ($)": results.projected_revenues,
                 "EBIT ($)": results.projected_ebit,
                 "NOPAT ($)": results.projected_nopat,
                 "Flujo Caja Libre (FCF) ($)": results.free_cash_flows,
                 "PV FCF ($)": results.pv_cash_flows,
             })
+            st.dataframe(df_projections.style.format({
+                "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
+                "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
+                "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
+            }), use_container_width=True)
 
-            st.dataframe(
-                df_projections.style.format({
-                    "Tasa Crec. (%)": "{:.2f}%",
-                    "Margen EBIT (%)": "{:.2f}%",
-                    "Ingresos Proyectados ($)": "${:,.2f}",
-                    "EBIT ($)": "${:,.2f}",
-                    "NOPAT ($)": "${:,.2f}",
-                    "Flujo Caja Libre (FCF) ($)": "${:,.2f}",
-                    "PV FCF ($)": "${:,.2f}",
-                }),
-                use_container_width=True,
-            )
-
-        # =========================================================================
-        # TABLA / PESTAÑA 3: GRÁFICOS Y ANÁLISIS
-        # =========================================================================
+        # TAB 3
         with tab3:
-            st.header("📈 Análisis Gráfico de Valor Presente")
-            st.subheader("Valor Presente de Flujos Proyectados (PV FCF)")
-
-            active_years_labels = [f"Año {i+1}" for i in range(len(results.pv_cash_flows))]
-
+            st.header("📈 Análisis Gráfico")
             df_chart = pd.DataFrame({
-                "Año": active_years_labels,
+                "Año": [f"Año {i+1}" for i in range(len(results.pv_cash_flows))],
                 "PV FCF": [float(val) for val in results.pv_cash_flows],
             }).set_index("Año")
-
             st.bar_chart(df_chart)
-        # =========================================================================
-        # TABLA / PESTAÑA 4: GUARDAR Y CONSULTAR ESCENARIOS EN BASE DE DATOS
-        # =========================================================================
-        with tab4:
-            st.header("💾 Gestión de Escenarios en MySQL / TiDB")
-            col_btn, col_history = st.columns([1, 2])
 
+        # TAB 4
+        with tab4:
+            st.header("💾 Gestión de Escenarios")
+            col_btn, col_history = st.columns([1, 2])
+            
             with col_btn:
-                st.write("#### Guardar Escenario Actual")
                 if st.button("💾 Guardar en Base de Datos", type="primary"):
                     try:
-                        success = DCFController.save_valuation(
-                            company_name=company_name,
-                            scenario_name=scenario_name,
-                            inputs=current_inputs,
-                            results=results,
-                        )
+                        success = DCFController.save_valuation(company_name=company_name, scenario_name=scenario_name, inputs=current_inputs, results=results)
                         if success:
-                            st.success(f"✅ Escenario '{scenario_name}' guardado exitosamente.")
-                        else:
-                            st.error("❌ Error al guardar mediante Controller.")
+                            st.success(f"✅ Escenario '{scenario_name}' guardado.")
                     except Exception:
                         try:
-                            db_url = st.secrets["mysql"]["url"]
-                            engine = create_engine(db_url)
-                            summary_data = {
-                                "company_name": [company_name],
-                                "scenario_name": [scenario_name],
-                                "enterprise_value": [results.enterprise_value],
-                                "equity_value": [results.equity_value],
-                                "wacc": [wacc],
-                                "terminal_growth_rate": [terminal_growth_rate],
-                                "net_debt": [net_debt],
-                            }
-                            df_summary = pd.DataFrame(summary_data)
+                            engine = get_sqlalchemy_engine()
+                            df_summary = pd.DataFrame([{
+                                "company_name": company_name, "scenario_name": scenario_name,
+                                "enterprise_value": results.enterprise_value, "equity_value": results.equity_value,
+                                "wacc": wacc, "terminal_growth_rate": terminal_growth_rate, "net_debt": net_debt
+                            }])
                             df_summary.to_sql("dcf_valuations", con=engine, if_exists="append", index=False)
-                            st.success(f"✅ Escenario '{scenario_name}' guardado en 'dcf_valuations'.")
+                            st.success(f"✅ Guardado en 'dcf_valuations'.")
                         except Exception as err:
-                            st.error(f"❌ Error al guardar en MySQL: {err}")
+                            st.error(f"❌ Error en MySQL: {err}")
 
             with col_history:
-                st.write("#### Escenarios Guardados de la Empresa")
                 if st.button("🔄 Consultar Historial"):
                     scenarios = DCFController.get_saved_scenarios(company_name)
                     if scenarios:
-                        df_scenarios = pd.DataFrame(scenarios)
-                        st.dataframe(
-                            df_scenarios.style.format({
-                                "enterprise_value": "${:,.2f}",
-                                "equity_value": "${:,.2f}",
-                            }),
-                            use_container_width=True,
-                        )
+                        st.dataframe(pd.DataFrame(scenarios), use_container_width=True)
                     else:
-                        st.info(f"No se encontraron escenarios registrados para '{company_name}'.")
+                        st.info(f"Sin registros para '{company_name}'.")
 
     except Exception as e:
-        st.error(f"Error en los cálculos o en la ejecución: {e}")
+        st.error(f"Error en la ejecución del modelo: {e}")
