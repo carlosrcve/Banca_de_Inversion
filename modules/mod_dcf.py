@@ -198,19 +198,61 @@ def render():
 
                         st.success(f"📋 Modelo interpretado. Company ID: **{comp_id}** | Escenario: **{scen_name}** | Años: **{len(df_projs)}**")
 
-                        # 3. REDIRECCIONAMIENTO E INSERCIÓN A TABLAS OFICIALES
+                        # 3. CÁLCULO PREVIO DE VALORES TERMINALES Y DE EMPRESA
+                        wacc_dec = wacc / 100.0 if wacc > 1 else wacc
+                        g_term_dec = g_term / 100.0 if g_term > 1 else g_term
+
+                        # Recorrer para calcular el último FCF proyectado
+                        curr_rev = hist_rev
+                        prev_rev = hist_rev
+                        last_fcf = 0.0
+                        sum_pv_fcf = 0.0
+                        n_years = len(df_projs)
+
+                        for idx, row in df_projs.iterrows():
+                            year_index = idx + 1
+                            g_rate = parse_num(row.get("growth_rate", 0))
+                            ebit_m = parse_num(row.get("ebit_margin", 0))
+
+                            if g_rate > 1.0: g_rate /= 100.0
+                            if ebit_m > 1.0: ebit_m /= 100.0
+
+                            p_rev = curr_rev * (1 + g_rate)
+                            ebit = p_rev * ebit_m
+                            nopat = ebit * (1 - (tax_rate / 100.0 if tax_rate > 1 else tax_rate))
+                            da = p_rev * (da_pct / 100.0 if da_pct > 1 else da_pct)
+                            capex = p_rev * (capex_pct / 100.0 if capex_pct > 1 else capex_pct)
+                            nwc_change = (p_rev - prev_rev) * (nwc_pct / 100.0 if nwc_pct > 1 else nwc_pct)
+                            
+                            last_fcf = nopat + da - capex - nwc_change
+                            sum_pv_fcf += last_fcf / ((1 + wacc_dec) ** year_index)
+                            
+                            prev_rev = p_rev
+                            curr_rev = p_rev
+
+                        # Fórmulas de Terminal Value, EV y Equity Value
+                        if wacc_dec > g_term_dec:
+                            terminal_value = (last_fcf * (1 + g_term_dec)) / (wacc_dec - g_term_dec)
+                        else:
+                            terminal_value = 0.0
+
+                        pv_terminal_value = terminal_value / ((1 + wacc_dec) ** n_years) if n_years > 0 else 0.0
+                        enterprise_value = sum_pv_fcf + pv_terminal_value
+                        equity_value = enterprise_value - net_debt
+
+                        # 4. REDIRECCIONAMIENTO E INSERCIÓN A TABLAS OFICIALES
                         if st.button(f"🚀 Guardar {uploaded_file.name} en MySQL", key=f"btn_gen_{uploaded_file.name}"):
                             with engine.begin() as conn:
-                                # A) Insertar encabezado en `dcf_analyses`
+                                # A) Insertar encabezado en `dcf_analyses` (incluyendo columnas calculadas)
                                 query_analysis = text("""
                                     INSERT INTO dcf_analyses (
                                         company_id, scenario_name, historical_revenue, tax_rate, 
                                         capex_percent, nwc_percent, da_percent, wacc, 
-                                        terminal_growth_rate, net_debt
+                                        terminal_growth_rate, net_debt, terminal_value, enterprise_value, equity_value
                                     ) VALUES (
                                         :company_id, :scenario_name, :historical_revenue, :tax_rate, 
                                         :capex_percent, :nwc_percent, :da_percent, :wacc, 
-                                        :terminal_growth_rate, :net_debt
+                                        :terminal_growth_rate, :net_debt, :terminal_value, :enterprise_value, :equity_value
                                     )
                                 """)
                                 
@@ -224,7 +266,10 @@ def render():
                                     "da_percent": da_pct,
                                     "wacc": wacc,
                                     "terminal_growth_rate": g_term,
-                                    "net_debt": net_debt
+                                    "net_debt": net_debt,
+                                    "terminal_value": terminal_value,
+                                    "enterprise_value": enterprise_value,
+                                    "equity_value": equity_value
                                 })
                                 
                                 analysis_id = res_an.lastrowid
@@ -263,8 +308,6 @@ def render():
                                     nwc_change = rev_change * (nwc_pct / 100.0 if nwc_pct > 1 else nwc_pct)
                                     
                                     fcf = nopat + da - capex - nwc_change
-                                    
-                                    wacc_dec = wacc / 100.0 if wacc > 1 else wacc
                                     pv_fcf = fcf / ((1 + wacc_dec) ** year_index)
 
                                     conn.execute(query_projections, {
