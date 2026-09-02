@@ -430,20 +430,18 @@ def render():
                         pv_tv_val = results_db.pv_terminal_value
                         ev_val = results_db.enterprise_value
                         eq_val = results_db.equity_value
-
+                        
                         tv_pct = (pv_tv_val / ev_val * 100) if ev_val > 0 else 0
                         pv_fcf_total = sum(results_db.pv_cash_flows)
                         fcf_pct = 100 - tv_pct
                         n_years = len(results_db.pv_cash_flows)
 
-                        # --- INTERPRETACIÓN Y EXPLICACIÓN LIMPIA DE MARKDOWN ---
+                        # --- INTERPRETACIÓN Y EXPLICACIÓN LIMPIA CON MARKDOWN ROBUSTO ---
                         st.info(
                             f"📝 **Interpretación Financiera de los Resultados (Dinámico desde MySQL):**\n\n"
-                            f"• **💵 Equity Value (Patrimonio) — ${eq_val:,.2f}:** Es el valor neto correspondiente a los accionistas. "
-                            f"Al compararse con el Enterprise Value (${ev_val:,.2f}), refleja un ajuste por Deuda Neta de **${db_debt:,.2f}**.\n\n"
-                            f"• **🌐 Valor Presente Terminal (PV TV) — ${pv_tv_val:,.2f}:** Es el valor actual de todos los flujos de caja "
-                            f"a perpetuidad a partir del año {n_years + 1}. Representa el **{tv_pct:.2f}%** del valor total de la compañía, "
-                            f"mientras que los flujos proyectados explícitos de los primeros {n_years} años aportan el **{fcf_pct:.2f}%** restante (${pv_fcf_total:,.2f})."
+                            f"* **🏢 Enterprise Value (Valor Operativo) — ${ev_val:,.2f}:** Es el valor total de la operación del negocio calculado en base a las premisas registradas en la base de datos.\n\n"
+                            f"* **💵 Equity Value (Patrimonio) — ${eq_val:,.2f}:** Es el valor neto correspondiente a los accionistas. Al compararse con el Enterprise Value, refleja un ajuste por Deuda Neta de **${db_debt:,.2f}**.\n\n"
+                            f"* **🌐 Valor Presente Terminal (PV TV) — ${pv_tv_val:,.2f}:** Es el valor actual de todos los flujos de caja a perpetuidad a partir del año {n_years + 1}. Representa el **{tv_pct:.2f}%** del valor total de la compañía, mientras que los flujos proyectados explícitos de los primeros {n_years} años aportan el **{fcf_pct:.2f}%** restante (${pv_fcf_total:,.2f})."
                         )
 
                         st.markdown("---")
