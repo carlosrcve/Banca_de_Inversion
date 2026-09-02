@@ -201,37 +201,45 @@ def render():
         )
 
         # TAB 2
+        # En Tab 2:
         with tab2:
             st.header("📊 Resultados de Valoración (Leídos desde MySQL)")
 
             try:
                 engine = get_sqlalchemy_engine()
 
-                # 1. Leer Inputs omitiendo 'ORDER BY id'
+                # 1. Traer todo de excel_inputs_raw para evitar errores de case-sensitivity en los nombres de columnas
                 query_inputs = """
-                    SELECT Parametro, Valor 
+                    SELECT * 
                     FROM excel_inputs_raw 
                     WHERE company_name = %s AND scenario_name = %s
                 """
                 df_db_inputs = pd.read_sql(query_inputs, con=engine, params=(company_name, scenario_name))
 
-                # 2. Leer Proyecciones ordenando por 'year' en lugar de 'id'
+                # 2. Traer todo de excel_projections_raw
                 query_projs = """
-                    SELECT year, growth_rate, ebit_margin 
+                    SELECT * 
                     FROM excel_projections_raw 
                     WHERE company_name = %s AND scenario_name = %s
-                    ORDER BY year ASC
                 """
                 df_db_projs = pd.read_sql(query_projs, con=engine, params=(company_name, scenario_name))
 
                 if not df_db_inputs.empty and not df_db_projs.empty:
-                    # Crear diccionario limpio de inputs
+                    # Estandarizar nombres de columnas a minúsculas
+                    df_db_inputs.columns = [str(c).lower() for c in df_db_inputs.columns]
+                    df_db_projs.columns = [str(c).lower() for c in df_db_projs.columns]
+
+                    # Identificar la columna que contiene la clave y la que contiene el valor
+                    col_param = next((c for c in df_db_inputs.columns if c in ["parametro", "variable", "concepto", "key"]), df_db_inputs.columns[0])
+                    col_val = next((c for c in df_db_inputs.columns if c in ["valor", "value", "monto"]), df_db_inputs.columns[1] if len(df_db_inputs.columns) > 1 else df_db_inputs.columns[0])
+
+                    # Crear el diccionario de inputs
                     inputs_dict = dict(zip(
-                        df_db_inputs["Parametro"].astype(str).str.strip(), 
-                        df_db_inputs["Valor"]
+                        df_db_inputs[col_param].astype(str).str.strip(), 
+                        df_db_inputs[col_val]
                     ))
 
-                    # Extraer valores para el cálculo
+                    # Extraer valores para el cálculo DCF
                     db_historical_revenue = float(inputs_dict.get("historical_revenue", historical_revenue))
                     db_tax_rate = float(inputs_dict.get("tax_rate", tax_rate))
                     db_capex = float(inputs_dict.get("capex_percent", capex_percent))
@@ -240,6 +248,10 @@ def render():
                     db_wacc = float(inputs_dict.get("wacc", wacc))
                     db_g = float(inputs_dict.get("terminal_growth_rate", terminal_growth_rate))
                     db_debt = float(inputs_dict.get("net_debt", net_debt))
+
+                    # Ordenar proyecciones si existe la columna 'year'
+                    if "year" in df_db_projs.columns:
+                        df_db_projs = df_db_projs.sort_values(by="year")
 
                     db_growth_rates = [float(x) for x in df_db_projs["growth_rate"].tolist()]
                     db_ebit_margins = [float(x) for x in df_db_projs["ebit_margin"].tolist()]
