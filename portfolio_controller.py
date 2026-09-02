@@ -1,5 +1,4 @@
 # portfolio_controller.py
-# portfolio_controller.py
 import os
 import sys
 
@@ -11,50 +10,50 @@ from dcf_controller import get_db_connection
 
 class PortfolioController:
 
-@staticmethod
-def save_market_quote(
-    symbol: str,
-    asset_name: str,
-    asset_type: str,
-    price: float,
-    change_percent: float,
-    currency: str = "USD",
-) -> tuple[bool, str]:
-    """Inserta la cotización respetando la estructura real de valuations_db_banca_inversion."""
-    conn = get_db_connection()
-    if not conn:
-        return False, "Error de conexión a la base de datos."
+    @staticmethod
+    def save_market_quote(
+        symbol: str,
+        asset_name: str,
+        asset_type: str,
+        price: float,
+        change_percent: float,
+        currency: str = "USD",
+    ) -> tuple[bool, str]:
+        """Inserta la cotización respetando la estructura real de valuations_db_banca_inversion."""
+        conn = get_db_connection()
+        if not conn:
+            return False, "Error de conexión a la base de datos."
 
-    try:
-        cursor = conn.cursor()
-        # Consulta alineada con las columnas vistas en MySQL Workbench
-        query = """
-            INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent, recorded_at)
-            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        """
-        cursor.execute(
-            query,
-            (
-                symbol,
-                asset_name,
-                asset_type,
-                price,
-                currency,
-                change_percent,
-            ),
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True, "Guardado con éxito."
-    except Exception as e:
-        if conn:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
+        try:
+            cursor = conn.cursor()
+            # Consulta alineada con las columnas vistas en MySQL Workbench
+            query = """
+                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent, recorded_at)
+                VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            """
+            cursor.execute(
+                query,
+                (
+                    symbol,
+                    asset_name,
+                    asset_type,
+                    price,
+                    currency,
+                    change_percent,
+                ),
+            )
+            conn.commit()
+            cursor.close()
             conn.close()
-        return False, str(e)
+            return True, "Guardado con éxito."
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                conn.close()
+            return False, str(e)
 
     @staticmethod
     def create_portfolio(
