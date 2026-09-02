@@ -1,12 +1,12 @@
 # portfolio_controller.py
-# portfolio_controller.py
 import os
 import sys
 
 # Garantiza que el directorio raíz esté en el path de ejecución
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from dcf_controller import get_db_connection
+from sqlalchemy import text
+from dcf_controller import get_db_connection, get_sqlalchemy_engine
 
 
 class PortfolioController:
@@ -15,7 +15,7 @@ class PortfolioController:
     def save_market_quote(symbol, asset_name, asset_type, price, change_percent):
         """Guarda una cotización usando SQLAlchemy de forma idéntica al resto de la app."""
         try:
-            engine = get_sqlalchemy_engine()  # Usa el mismo motor configurado en tu app
+            engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
                 query = text("""
                     INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
@@ -33,7 +33,7 @@ class PortfolioController:
             error_msg = str(e)
             print(f"❌ Error al guardar cotización: {e}")
             return False, error_msg
-            
+
     @staticmethod
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
