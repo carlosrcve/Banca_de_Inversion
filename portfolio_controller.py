@@ -22,17 +22,17 @@ class PortfolioController:
         try:
             cursor = conn.cursor()
             query = """
-                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent)
+                VALUES (%s, %s, %s, %s, %s, %s)
             """
-            cursor.execute(query, (symbol, asset_name, asset_type, price, change_percent))
+            # Incluimos "USD" para la columna currency que aparece en tu tabla
+            cursor.execute(query, (symbol, asset_name, asset_type, price, "USD", change_percent))
             
             conn.commit()
             cursor.close()
             conn.close()
             return True
         except Exception as e:
-            # ESTO IMPRIMIRÁ EL ERROR EXACTO EN TU TERMINAL O LOGS DE STREAMLIT
             print(f"❌ ERROR DETALLADO AL INSERTAR EN market_quotes: {repr(e)}")
             if conn:
                 try:
