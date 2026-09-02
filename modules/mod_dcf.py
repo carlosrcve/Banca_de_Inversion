@@ -333,135 +333,141 @@ def render():
         try:
             engine = get_sqlalchemy_engine()
 
-            query_inputs = text("""
-                SELECT Parametro, Valor 
-                FROM excel_inputs_raw 
-                WHERE company_name = :company AND scenario_name = :scenario
-                ORDER BY id ASC
-            """)
+            # 1. Verificación directa de registros en dcf_analyses
+            df_analyses_check = pd.read_sql("SELECT analysis_id FROM dcf_analyses LIMIT 1", con=engine)
 
-            query_projs = text("""
-                SELECT year, growth_rate, ebit_margin 
-                FROM excel_projections_raw 
-                WHERE company_name = :company AND scenario_name = :scenario
-                ORDER BY year ASC
-            """)
+            if df_analyses_check.empty:
+                st.warning("⚠️ No hay análisis registrados en MySQL (`dcf_analyses` está vacía). Por favor carga un archivo en la Pestaña 1.")
+            else:
+                query_inputs = text("""
+                    SELECT Parametro, Valor 
+                    FROM excel_inputs_raw 
+                    WHERE company_name = :company AND scenario_name = :scenario
+                    ORDER BY id ASC
+                """)
 
-            df_db_inputs = pd.read_sql(query_inputs, con=engine, params={"company": company_name, "scenario": scenario_name})
-            df_db_projs = pd.read_sql(query_projs, con=engine, params={"company": company_name, "scenario": scenario_name})
+                query_projs = text("""
+                    SELECT year, growth_rate, ebit_margin 
+                    FROM excel_projections_raw 
+                    WHERE company_name = :company AND scenario_name = :scenario
+                    ORDER BY year ASC
+                """)
 
-            if not df_db_inputs.empty and not df_db_projs.empty:
-                # Función para limpiar cualquier string con %, $ o comas guardado en MySQL
-                def parse_db_val(val, default=0.0):
-                    if pd.isna(val) or val is None:
-                        return float(default)
-                    val_str = str(val).strip().replace("$", "").replace(",", "")
-                    if "%" in val_str:
+                df_db_inputs = pd.read_sql(query_inputs, con=engine, params={"company": company_name, "scenario": scenario_name})
+                df_db_projs = pd.read_sql(query_projs, con=engine, params={"company": company_name, "scenario": scenario_name})
+
+                if not df_db_inputs.empty and not df_db_projs.empty:
+                    # Función para limpiar cualquier string con %, $ o comas guardado en MySQL
+                    def parse_db_val(val, default=0.0):
+                        if pd.isna(val) or val is None:
+                            return float(default)
+                        val_str = str(val).strip().replace("$", "").replace(",", "")
+                        if "%" in val_str:
+                            try:
+                                return float(val_str.replace("%", "").strip()) / 100.0
+                            except ValueError:
+                                return float(default)
                         try:
-                            return float(val_str.replace("%", "").strip()) / 100.0
+                            return float(val_str)
                         except ValueError:
                             return float(default)
-                    try:
-                        return float(val_str)
-                    except ValueError:
-                        return float(default)
 
-                # Mapeo normalizando nombres de parámetros (snake_case)
-                inputs_dict = {
-                    clean_column_name(k): v 
-                    for k, v in zip(df_db_inputs["Parametro"], df_db_inputs["Valor"])
-                }
+                    # Mapeo normalizando nombres de parámetros (snake_case)
+                    inputs_dict = {
+                        clean_column_name(k): v 
+                        for k, v in zip(df_db_inputs["Parametro"], df_db_inputs["Valor"])
+                    }
 
-                # Lectura de parámetros desde la BD con fallbacks financieros válidos
-                db_historical_revenue = parse_db_val(inputs_dict.get("historical_revenue"), 1000000.0)
-                db_tax_rate = parse_db_val(inputs_dict.get("tax_rate"), 0.25)
-                db_capex = parse_db_val(inputs_dict.get("capex_percent"), 0.04)
-                db_nwc = parse_db_val(inputs_dict.get("nwc_percent"), 0.02)
-                db_da = parse_db_val(inputs_dict.get("da_percent"), 0.03)
-                
-                db_wacc = parse_db_val(inputs_dict.get("wacc"), 0.10)
-                db_g = parse_db_val(inputs_dict.get("terminal_growth_rate"), 0.025)
-                db_debt = parse_db_val(inputs_dict.get("net_debt"), 0.0)
-
-                # Ajustar decimales si fueron guardados como enteros (ej. 10 en vez de 0.10)
-                if db_wacc > 1.0: db_wacc /= 100.0
-                if db_g > 1.0: db_g /= 100.0
-                if db_tax_rate > 1.0: db_tax_rate /= 100.0
-                if db_capex > 1.0: db_capex /= 100.0
-                if db_nwc > 1.0: db_nwc /= 100.0
-                if db_da > 1.0: db_da /= 100.0
-
-                # Procesar tasas de proyecciones
-                db_growth_rates = [parse_db_val(x, 0.05) for x in df_db_projs["growth_rate"]]
-                db_ebit_margins = [parse_db_val(x, 0.15) for x in df_db_projs["ebit_margin"]]
-
-                db_growth_rates = [x / 100.0 if x > 1.0 else x for x in db_growth_rates]
-                db_ebit_margins = [x / 100.0 if x > 1.0 else x for x in db_ebit_margins]
-
-                # Validación contra división por cero
-                if db_wacc <= db_g:
-                    st.error(f"🚨 **WACC ({db_wacc:.2%}) debe ser mayor que g ({db_g:.2%}).** Revisa la base de datos.")
-                else:
-                    results_db = DCFController.run_valuation(
-                        historical_revenue=db_historical_revenue,
-                        growth_rates=db_growth_rates,
-                        ebit_margins=db_ebit_margins,
-                        tax_rate=db_tax_rate,
-                        capex_percent=db_capex,
-                        nwc_percent=db_nwc,
-                        da_percent=db_da,
-                        wacc=db_wacc,
-                        terminal_growth_rate=db_g,
-                        net_debt=db_debt
-                    )
-
-                    col_res1, col_res2, col_res3 = st.columns(3)
-                    col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
-                    col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
-                    col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
-
-                    # --- CÁLCULO DINÁMICO DE PORCENTAJES Y SUMATORIAS ---
-                    pv_tv_val = results_db.pv_terminal_value
-                    ev_val = results_db.enterprise_value
-                    eq_val = results_db.equity_value
+                    # Lectura de parámetros desde la BD con fallbacks financieros válidos
+                    db_historical_revenue = parse_db_val(inputs_dict.get("historical_revenue"), 1000000.0)
+                    db_tax_rate = parse_db_val(inputs_dict.get("tax_rate"), 0.25)
+                    db_capex = parse_db_val(inputs_dict.get("capex_percent"), 0.04)
+                    db_nwc = parse_db_val(inputs_dict.get("nwc_percent"), 0.02)
+                    db_da = parse_db_val(inputs_dict.get("da_percent"), 0.03)
                     
-                    tv_pct = (pv_tv_val / ev_val * 100) if ev_val > 0 else 0
-                    pv_fcf_total = sum(results_db.pv_cash_flows)
-                    fcf_pct = 100 - tv_pct
-                    n_years = len(results_db.pv_cash_flows)
+                    db_wacc = parse_db_val(inputs_dict.get("wacc"), 0.10)
+                    db_g = parse_db_val(inputs_dict.get("terminal_growth_rate"), 0.025)
+                    db_debt = parse_db_val(inputs_dict.get("net_debt"), 0.0)
 
-                    # --- INTERPRETACIONAL Y EXPLICACIÓN CON VARIABLES EN TIEMPO REAL ---
-                    st.info(f"""
-                    📝 **Interpretación Financiera de los Resultados (Dinámico desde MySQL):**
+                    # Ajustar decimales si fueron guardados como enteros (ej. 10 en vez de 0.10)
+                    if db_wacc > 1.0: db_wacc /= 100.0
+                    if db_g > 1.0: db_g /= 100.0
+                    if db_tax_rate > 1.0: db_tax_rate /= 100.0
+                    if db_capex > 1.0: db_capex /= 100.0
+                    if db_nwc > 1.0: db_nwc /= 100.0
+                    if db_da > 1.0: db_da /= 100.0
 
-                    * **🏢 Enterprise Value (Valor Operativo) — ${ev_val:,.2f}:** Es el valor total de la operación del negocio calculado en base a las premisas registradas en la base de datos.
-                    * **💵 Equity Value (Patrimonio) — ${eq_val:,.2f}:** Es el valor neto correspondiente a los accionistas. Al compararse con el Enterprise Value, refleja un ajuste por Deuda Neta de **${db_debt:,.2f}**.
-                    * **🌐 Valor Presente Terminal (PV TV) — ${pv_tv_val:,.2f}:** Es el valor actual de todos los flujos de caja a perpetuidad a partir del año {n_years + 1}. Representa el **{tv_pct:.2f}%** del valor total de la compañía, mientras que los flujos proyectados explícitos de los primeros {n_years} años aportan el **{fcf_pct:.2f}%** restante (${pv_fcf_total:,.2f}).
-                    """)
+                    # Procesar tasas de proyecciones
+                    db_growth_rates = [parse_db_val(x, 0.05) for x in df_db_projs["growth_rate"]]
+                    db_ebit_margins = [parse_db_val(x, 0.15) for x in df_db_projs["ebit_margin"]]
 
-                    st.markdown("---")
+                    db_growth_rates = [x / 100.0 if x > 1.0 else x for x in db_growth_rates]
+                    db_ebit_margins = [x / 100.0 if x > 1.0 else x for x in db_ebit_margins]
 
-                    df_projections = pd.DataFrame({
-                        "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
-                        "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
-                        "Margen EBIT (%)": [m * 100 for m in db_ebit_margins],
-                        "Ingresos Proyectados ($)": results_db.projected_revenues,
-                        "EBIT ($)": results_db.projected_ebit,
-                        "NOPAT ($)": results_db.projected_nopat,
-                        "Flujo Caja Libre (FCF) ($)": results_db.free_cash_flows,
-                        "PV FCF ($)": results_db.pv_cash_flows,
-                    })
+                    # Validación contra división por cero
+                    if db_wacc <= db_g:
+                        st.error(f"🚨 **WACC ({db_wacc:.2%}) debe ser mayor que g ({db_g:.2%}).** Revisa la base de datos.")
+                    else:
+                        results_db = DCFController.run_valuation(
+                            historical_revenue=db_historical_revenue,
+                            growth_rates=db_growth_rates,
+                            ebit_margins=db_ebit_margins,
+                            tax_rate=db_tax_rate,
+                            capex_percent=db_capex,
+                            nwc_percent=db_nwc,
+                            da_percent=db_da,
+                            wacc=db_wacc,
+                            terminal_growth_rate=db_g,
+                            net_debt=db_debt
+                        )
 
-                    st.dataframe(df_projections.style.format({
-                        "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
-                        "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
-                        "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
-                    }), use_container_width=True)
+                        col_res1, col_res2, col_res3 = st.columns(3)
+                        col_res1.metric("🏢 Enterprise Value (EV)", f"${results_db.enterprise_value:,.2f}")
+                        col_res2.metric("💵 Equity Value (Patrimonio)", f"${results_db.equity_value:,.2f}")
+                        col_res3.metric("🌐 Valor Presente TV", f"${results_db.pv_terminal_value:,.2f}")
 
-                    st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
+                        # --- CÁLCULO DINÁMICO DE PORCENTAJES Y SUMATORIAS ---
+                        pv_tv_val = results_db.pv_terminal_value
+                        ev_val = results_db.enterprise_value
+                        eq_val = results_db.equity_value
+                        
+                        tv_pct = (pv_tv_val / ev_val * 100) if ev_val > 0 else 0
+                        pv_fcf_total = sum(results_db.pv_cash_flows)
+                        fcf_pct = 100 - tv_pct
+                        n_years = len(results_db.pv_cash_flows)
 
-            else:
-                st.warning(f"⚠️ No hay datos guardados para '{company_name}' / '{scenario_name}'. Ve a la Pestaña 1 e insértalos en MySQL.")
+                        # --- INTERPRETACIÓN Y EXPLICACIÓN CON VARIABLES EN TIEMPO REAL ---
+                        st.info(f"""
+                        📝 **Interpretación Financiera de los Resultados (Dinámico desde MySQL):**
+
+                        * **🏢 Enterprise Value (Valor Operativo) — ${ev_val:,.2f}:** Es el valor total de la operación del negocio calculado en base a las premisas registradas en la base de datos.
+                        * **💵 Equity Value (Patrimonio) — ${eq_val:,.2f}:** Es el valor neto correspondiente a los accionistas. Al compararse con el Enterprise Value, refleja un ajuste por Deuda Neta de **${db_debt:,.2f}**.
+                        * **🌐 Valor Presente Terminal (PV TV) — ${pv_tv_val:,.2f}:** Es el valor actual de todos los flujos de caja a perpetuidad a partir del año {n_years + 1}. Representa el **{tv_pct:.2f}%** del valor total de la compañía, mientras que los flujos proyectados explícitos de los primeros {n_years} años aportan el **{fcf_pct:.2f}%** restante (${pv_fcf_total:,.2f}).
+                        """)
+
+                        st.markdown("---")
+
+                        df_projections = pd.DataFrame({
+                            "Año": [f"Año {i+1}" for i in range(len(db_growth_rates))],
+                            "Tasa Crec. (%)": [g * 100 for g in db_growth_rates],
+                            "Margen EBIT (%)": [m * 100 for m in db_ebit_margins],
+                            "Ingresos Proyectados ($)": results_db.projected_revenues,
+                            "EBIT ($)": results_db.projected_ebit,
+                            "NOPAT ($)": results_db.projected_nopat,
+                            "Flujo Caja Libre (FCF) ($)": results_db.free_cash_flows,
+                            "PV FCF ($)": results_db.pv_cash_flows,
+                        })
+
+                        st.dataframe(df_projections.style.format({
+                            "Tasa Crec. (%)": "{:.2f}%", "Margen EBIT (%)": "{:.2f}%",
+                            "Ingresos Proyectados ($)": "${:,.2f}", "EBIT ($)": "${:,.2f}",
+                            "NOPAT ($)": "${:,.2f}", "Flujo Caja Libre (FCF) ($)": "${:,.2f}", "PV FCF ($)": "${:,.2f}"
+                        }), use_container_width=True)
+
+                        st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
+
+                else:
+                    st.warning(f"⚠️ No hay datos guardados en las tablas raw para '{company_name}' / '{scenario_name}'. Ve a la Pestaña 1 e insértalos en MySQL.")
 
         except Exception as db_err:
             st.error(f"❌ Error al procesar datos desde MySQL: {db_err}")
