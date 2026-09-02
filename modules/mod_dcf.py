@@ -1,4 +1,5 @@
 import re
+import io
 import unicodedata
 import pandas as pd
 import streamlit as st
@@ -103,6 +104,74 @@ def render():
     def clean_str(val):
         return str(val).strip().lower()
 
+    # --- FUNCIÓN PARA CREAR TABLAS EN MYSQL SI NO EXISTEN ---
+    def init_db_tables(cursor):
+        query_padre = """
+        CREATE TABLE IF NOT EXISTS dcf_analyses (
+            analysis_id INT AUTO_INCREMENT PRIMARY KEY,
+            company_id INT NOT NULL DEFAULT 1,
+            scenario_name VARCHAR(255) NOT NULL,
+            historical_revenue DECIMAL(18,2) NOT NULL,
+            tax_rate DECIMAL(10,4) NOT NULL,
+            capex_percent DECIMAL(10,4) NOT NULL,
+            nwc_percent DECIMAL(10,4) NOT NULL,
+            da_percent DECIMAL(10,4) NOT NULL,
+            wacc DECIMAL(10,4) NOT NULL,
+            terminal_growth_rate DECIMAL(10,4) NOT NULL,
+            net_debt DECIMAL(18,2) NOT NULL,
+            terminal_value DECIMAL(18,2) NOT NULL,
+            enterprise_value DECIMAL(18,2) NOT NULL,
+            equity_value DECIMAL(18,2) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """
+        query_hijo = """
+        CREATE TABLE IF NOT EXISTS dcf_projections (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            analysis_id INT NOT NULL,
+            year_index INT NOT NULL,
+            year_label VARCHAR(50) NOT NULL,
+            growth_rate DECIMAL(10,4) NOT NULL,
+            ebit_margin DECIMAL(10,4) NOT NULL,
+            projected_revenue DECIMAL(18,2) NOT NULL,
+            ebit DECIMAL(18,2) NOT NULL,
+            nopat DECIMAL(18,2) NOT NULL,
+            da DECIMAL(18,2) NOT NULL,
+            capex DECIMAL(18,2) NOT NULL,
+            nwc_change DECIMAL(18,2) NOT NULL,
+            fcf DECIMAL(18,2) NOT NULL,
+            pv_fcf DECIMAL(18,2) NOT NULL,
+            FOREIGN KEY (analysis_id) REFERENCES dcf_analyses(analysis_id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        """
+        cursor.execute(query_padre)
+        cursor.execute(query_hijo)
+
+
+    # --- CASO 4 EN PESTAÑA 1 ---
+    if caso_seleccionado == "Caso 4: Persistencia MySQL (Tabla Padre/Hijo)":
+        st.subheader("💾 Caso 4: Registro y Carga de Valoraciones DCF en MySQL")
+
+        with st.expander("⚙️ Inicialización de Tablas en Base de Datos", expanded=False):
+            if st.button("Crear / Verificar Tablas DCF"):
+                try:
+                    # Reemplazar por tus credenciales de conexión
+                    conn = mysql.connector.connect(
+                        host=st.secrets["mysql"]["host"],
+                        user=st.secrets["mysql"]["user"],
+                        password=st.secrets["mysql"]["password"],
+                        database=st.secrets["mysql"]["database"]
+                    )
+                    cursor = conn.cursor()
+                    init_db_tables(cursor)
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    st.success("✅ Tablas 'dcf_analyses' y 'dcf_projections' listas en MySQL.")
+                except Error as e:
+                    st.error(f"❌ Error al conectar o crear tablas en MySQL: {e}")
+
+    # Pestaña 1 con todo el flujo de casos en orden
     with tab1:
         st.header("📥 Cargar Modelo DCF a MySQL")
 
@@ -156,23 +225,20 @@ def render():
                         if df_parents.empty:
                             st.error("❌ No hay registros en `dcf_analyses`. Debes subir primero la tabla padre.")
                         else:
-                            # Preselecciona automáticamente el ÚLTIMO ID creado en la primera tabla
                             latest_id = int(df_parents.iloc[0]["analysis_id"])
 
                             target_analysis_id = st.selectbox(
                                 "📌 Vincular estas proyecciones al Análisis ID:",
                                 options=df_parents["analysis_id"].tolist(),
-                                index=0,  # Toma automáticamente el primero de la lista (el más reciente)
+                                index=0,  # Preselecciona el más reciente
                                 format_func=lambda x: f"ID #{x} - Escenario: {df_parents[df_parents['analysis_id']==x]['scenario_name'].values[0]}"
                             )
 
-                            # Sobrescribir el '1' del Excel con el ID real registrado en MySQL
                             df_first_sheet["analysis_id"] = target_analysis_id
 
                             # 3. Inserción directa en MySQL
                             if st.button(f"🚀 Guardar {uploaded_file.name} en `dcf_projections`", key=f"btn_direct_{uploaded_file.name}"):
                                 try:
-                                    # Omitir columnas autogeneradas (PK y timestamp)
                                     df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
                                     
                                     df_to_insert.to_sql(
@@ -202,7 +268,6 @@ def render():
 
                         inputs_dict = {clean_str(row[p_col]): row[v_col] for _, row in df_inputs_raw.iterrows()}
 
-                        # Función auxiliar para convertir porcentajes de manera consistente
                         def to_dec(val):
                             v = parse_num(val)
                             return v / 100.0 if v > 1.0 else v
@@ -224,7 +289,6 @@ def render():
                         if str(df_projs.columns[0]).startswith("Unnamed"):
                             df_projs = pd.read_excel(excel_file, sheet_name=proj_sheet, header=1)
 
-                        # Cálculo en un solo paso y almacenamiento en memoria
                         calculated_projections = []
                         curr_rev = hist_rev
                         prev_rev = hist_rev
@@ -265,7 +329,6 @@ def render():
                             prev_rev = p_rev
                             curr_rev = p_rev
 
-                        # Métricas terminales
                         n_years = len(calculated_projections)
                         last_fcf = calculated_projections[-1]["fcf"] if n_years > 0 else 0.0
                         
@@ -498,9 +561,160 @@ def render():
     # -------------------------------------------------------------------------
     # PESTAÑA 4: HISTORIAL Y CONSULTAS SQL
     # -------------------------------------------------------------------------
+    import io
+import pandas as pd
+import streamlit as st
+
+# --- FUNCIÓN AUXILIAR PARA GENERAR PLANTILLAS EXCEL EN MEMORIA ---
+def generate_sample_excel(case_type):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        if case_type == "analyses":
+            df_sample = pd.DataFrame([{
+                "company_id": 1,
+                "scenario_name": "Base",
+                "historical_revenue": 1000000.00,
+                "tax_rate": 0.30,
+                "capex_percent": 0.05,
+                "nwc_percent": 0.02,
+                "da_percent": 0.03,
+                "wacc": 0.10,
+                "terminal_growth_rate": 0.025,
+                "net_debt": 200000.00,
+                "terminal_value": 0.0,
+                "enterprise_value": 0.0,
+                "equity_value": 0.0
+            }])
+            df_sample.to_excel(writer, index=False, sheet_name="Analyses")
+            
+        elif case_type == "projections":
+            df_sample = pd.DataFrame([
+                {"analysis_id": 1, "year_index": 1, "year_label": "Año 1", "growth_rate": 0.10, "ebit_margin": 0.20},
+                {"analysis_id": 1, "year_index": 2, "year_label": "Año 2", "growth_rate": 0.08, "ebit_margin": 0.22},
+                {"analysis_id": 1, "year_index": 3, "year_label": "Año 3", "growth_rate": 0.06, "ebit_margin": 0.25}
+            ])
+            df_sample.to_excel(writer, index=False, sheet_name="Projections")
+            
+        elif case_type == "model":
+            df_inputs = pd.DataFrame([
+                {"Parametro": "company_id", "Valor": 1},
+                {"Parametro": "scenario_name", "Valor": "Optimista"},
+                {"Parametro": "historical_revenue", "Valor": 1500000},
+                {"Parametro": "tax_rate", "Valor": 0.25},
+                {"Parametro": "capex_percent", "Valor": 0.04},
+                {"Parametro": "nwc_percent", "Valor": 0.02},
+                {"Parametro": "da_percent", "Valor": 0.03},
+                {"Parametro": "wacc", "Valor": 0.09},
+                {"Parametro": "terminal_growth_rate", "Valor": 0.03},
+                {"Parametro": "net_debt", "Valor": 150000}
+            ])
+            df_projs = pd.DataFrame([
+                {"year_label": "2026", "growth_rate": 0.12, "ebit_margin": 0.21},
+                {"year_label": "2027", "growth_rate": 0.10, "ebit_margin": 0.23},
+                {"year_label": "2028", "growth_rate": 0.08, "ebit_margin": 0.25}
+            ])
+            df_inputs.to_excel(writer, index=False, sheet_name="Inputs")
+            df_projs.to_excel(writer, index=False, sheet_name="Projections")
+
+    return output.getvalue()
+
+
+    # --- FUNCIÓN AUXILIAR PARA GENERAR PLANTILLAS EXCEL EN MEMORIA ---
+    def generate_sample_excel(case_type):
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            if case_type == "analyses":
+                df_sample = pd.DataFrame([{
+                    "company_id": 1,
+                    "scenario_name": "Base",
+                    "historical_revenue": 1000000.00,
+                    "tax_rate": 0.30,
+                    "capex_percent": 0.05,
+                    "nwc_percent": 0.02,
+                    "da_percent": 0.03,
+                    "wacc": 0.10,
+                    "terminal_growth_rate": 0.025,
+                    "net_debt": 200000.00,
+                    "terminal_value": 0.0,
+                    "enterprise_value": 0.0,
+                    "equity_value": 0.0
+                }])
+                df_sample.to_excel(writer, index=False, sheet_name="Analyses")
+                
+            elif case_type == "projections":
+                df_sample = pd.DataFrame([
+                    {"analysis_id": 1, "year_index": 1, "year_label": "Año 1", "growth_rate": 0.10, "ebit_margin": 0.20},
+                    {"analysis_id": 1, "year_index": 2, "year_label": "Año 2", "growth_rate": 0.08, "ebit_margin": 0.22},
+                    {"analysis_id": 1, "year_index": 3, "year_label": "Año 3", "growth_rate": 0.06, "ebit_margin": 0.25}
+                ])
+                df_sample.to_excel(writer, index=False, sheet_name="Projections")
+                
+            elif case_type == "model":
+                df_inputs = pd.DataFrame([
+                    {"Parametro": "company_id", "Valor": 1},
+                    {"Parametro": "scenario_name", "Valor": "Optimista"},
+                    {"Parametro": "historical_revenue", "Valor": 1500000},
+                    {"Parametro": "tax_rate", "Valor": 0.25},
+                    {"Parametro": "capex_percent", "Valor": 0.04},
+                    {"Parametro": "nwc_percent", "Valor": 0.02},
+                    {"Parametro": "da_percent", "Valor": 0.03},
+                    {"Parametro": "wacc", "Valor": 0.09},
+                    {"Parametro": "terminal_growth_rate", "Valor": 0.03},
+                    {"Parametro": "net_debt", "Valor": 150000}
+                ])
+                df_projs = pd.DataFrame([
+                    {"year_label": "2026", "growth_rate": 0.12, "ebit_margin": 0.21},
+                    {"year_label": "2027", "growth_rate": 0.10, "ebit_margin": 0.23},
+                    {"year_label": "2028", "growth_rate": 0.08, "ebit_margin": 0.25}
+                ])
+                df_inputs.to_excel(writer, index=False, sheet_name="Inputs")
+                df_projs.to_excel(writer, index=False, sheet_name="Projections")
+
+        return output.getvalue()
+
+
+    # -------------------------------------------------------------------------
+    # PESTAÑA 4: HISTORIAL, PLANTILLAS Y CONSULTAS SQL
+    # -------------------------------------------------------------------------
     with tab4:
-        st.header("💾 Gestión de Escenarios & Consultas SQL")
-        
+        st.header("💾 Base de Datos, Historial & Plantillas")
+
+        # 📌 SECCIÓN DE DESCARGA DE PLANTILLAS MUESTRA
+        with st.expander("📥 **Descargar Plantillas de Muestra (Excel)**", expanded=True):
+            st.write("Descarga los formatos base de muestra para estructurar tus datos financieros antes de cargarlos:")
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.download_button(
+                    label="📄 Plantilla `dcf_analyses`",
+                    data=generate_sample_excel("analyses"),
+                    file_name="plantilla_dcf_analyses.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+            with col2:
+                st.download_button(
+                    label="📄 Plantilla `dcf_projections`",
+                    data=generate_sample_excel("projections"),
+                    file_name="plantilla_dcf_projections.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+            with col3:
+                st.download_button(
+                    label="📊 Modelo Completo (Inputs + Proj)",
+                    data=generate_sample_excel("model"),
+                    file_name="plantilla_modelo_completo.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+        st.markdown("---")
+
+        # 📌 CONSULTAS E HISTORIAL
+        st.subheader("⚙️ Consultas y Registros Guardados")
         if st.button("🔄 Consultar Historial Controller"):
             scenarios = DCFController.get_saved_scenarios(company_name)
             if scenarios:
@@ -518,3 +732,5 @@ def render():
                 show_dcf_dataframe(engine, selected_company_id)
             except Exception as err_join:
                 st.error(f"❌ Error al realizar la consulta JOIN: {err_join}")
+
+
