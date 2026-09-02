@@ -143,26 +143,44 @@ def render():
                     elif "year_index" in df_first_sheet.columns and ("valuation_id" in df_first_sheet.columns or "analysis_id" in df_first_sheet.columns):
                         st.info(f"📄 Archivo **{uploaded_file.name}** reconocido como estructura directa de **dcf_projections** ({len(df_first_sheet)} registros).")
                         
-                        # 1. Normalizar columna para MySQL: Asegurar que el DataFrame use 'analysis_id'
+                        # 1. Normalizar columna clave a 'analysis_id' para MySQL
                         if "valuation_id" in df_first_sheet.columns:
                             df_first_sheet = df_first_sheet.rename(columns={"valuation_id": "analysis_id"})
 
-                        # 2. Inserción Directa
-                        if st.button(f"🚀 Insertar {uploaded_file.name} en `dcf_projections`", key=f"btn_proj_{uploaded_file.name}"):
-                            try:
-                                # Eliminar columnas autogeneradas si existen
-                                df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
-                                
-                                # Guardar registros en la BD
-                                df_to_insert.to_sql(
-                                    name="dcf_projections", 
-                                    con=engine, 
-                                    if_exists="append", 
-                                    index=False
-                                )
-                                st.success(f"✅ Se insertaron {len(df_to_insert)} proyecciones con éxito en `dcf_projections`.")
-                            except Exception as e:
-                                st.error(f"❌ Error al insertar en `dcf_projections`: {e}")
+                        # 2. Consultar IDs existentes en la tabla PADRE (dcf_analyses)
+                        try:
+                            existing_ids = pd.read_sql("SELECT DISTINCT analysis_id FROM dcf_analyses", con=engine)["analysis_id"].tolist()
+                        except Exception as e:
+                            existing_ids = []
+                            st.warning(f"⚠️ No se pudo consultar la tabla `dcf_analyses`: {e}")
+
+                        # 3. Verificar si el analysis_id del Excel existe en la base de datos
+                        excel_analysis_ids = df_first_sheet["analysis_id"].dropna().unique().tolist()
+                        missing_ids = [aid for aid in excel_analysis_ids if aid not in existing_ids]
+
+                        if missing_ids:
+                            st.error(
+                                f"❌ **Error de Clave Foránea (FK):** El archivo contiene `analysis_id` **{missing_ids}** que no existen en la tabla `dcf_analyses`.\n\n"
+                                f"📌 **Cómo solucionarlo:**\n"
+                                f"1. Primero debes subir/insertar el análisis principal en `dcf_analyses` (Caso 1 o Caso 3).\n"
+                                f"2. O edita tu archivo Excel para que el campo `analysis_id` coincida con uno existente en la BD (IDs válidos actuales: `{existing_ids}`)."
+                            )
+                        else:
+                            # 4. Inserción segura en MySQL
+                            if st.button(f"🚀 Insertar {uploaded_file.name} en `dcf_projections`", key=f"btn_proj_{uploaded_file.name}"):
+                                try:
+                                    # Omitir clave primaria autoincremental 'id' y fecha de creación si vienen en el Excel
+                                    df_to_insert = df_first_sheet.drop(columns=["id", "created_at"], errors="ignore")
+                                    
+                                    df_to_insert.to_sql(
+                                        name="dcf_projections", 
+                                        con=engine, 
+                                        if_exists="append", 
+                                        index=False
+                                    )
+                                    st.success(f"✅ Se insertaron {len(df_to_insert)} proyecciones exitosamente en `dcf_projections`.")
+                                except Exception as e:
+                                    st.error(f"❌ Error al insertar en dcf_projections: {e}")
 
                     # =========================================================================
                     # CASO 3: ARCHIVO MODELO INTERNO (HOJAS "Inputs" Y "Projections")
