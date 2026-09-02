@@ -21,12 +21,12 @@ class PortfolioController:
 
         try:
             cursor = conn.cursor()
+            # Omitimos currency y recorded_at porque la tabla solo usa estas 5 columnas + id y created_at por defecto
             query = """
-                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, currency, change_percent)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO market_quotes (symbol, asset_name, asset_type, price, change_percent)
+                VALUES (%s, %s, %s, %s, %s)
             """
-            # Incluimos "USD" para la columna currency que aparece en tu tabla
-            cursor.execute(query, (symbol, asset_name, asset_type, price, "USD", change_percent))
+            cursor.execute(query, (symbol, asset_name, asset_type, price, change_percent))
             
             conn.commit()
             cursor.close()
@@ -41,7 +41,7 @@ class PortfolioController:
                     pass
                 conn.close()
             return False
-
+            
     @staticmethod
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
