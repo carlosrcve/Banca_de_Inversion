@@ -176,11 +176,18 @@ def render():
     # -------------------------------------------------------------------------
     # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PARSER ROBUSTO)
     # -------------------------------------------------------------------------
-    # -------------------------------------------------------------------------
-    # PESTAÑA 2: RESULTADOS (100% DESDE MYSQL CON PARSER ROBUSTO Y DIAGNÓSTICO)
-    # -------------------------------------------------------------------------
     with tab2:
         st.header("📊 Resultados de Valoración (Exclusivo desde MySQL)")
+
+        # 1. ASIGNACIÓN SEGURA DE VARIABLES DE BÚSQUEDA (Evita el UnboundLocalError)
+        query_company = st.session_state.get("company_name", "101")
+        query_scenario = st.session_state.get("scenario_name", "Caso Base")
+
+        # Sobrescribir con las variables globales del Sidebar si existen
+        if 'company_name' in locals() or 'company_name' in globals():
+            query_company = company_name
+        if 'scenario_name' in locals() or 'scenario_name' in globals():
+            query_scenario = scenario_name
 
         try:
             engine = get_sqlalchemy_engine()
@@ -199,8 +206,9 @@ def render():
                 ORDER BY year ASC
             """)
 
-            df_db_inputs = pd.read_sql(query_inputs, con=engine, params={"company": company_name, "scenario": scenario_name})
-            df_db_projs = pd.read_sql(query_projs, con=engine, params={"company": company_name, "scenario": scenario_name})
+            # Usar las variables de consulta seguras en los params
+            df_db_inputs = pd.read_sql(query_inputs, con=engine, params={"company": query_company, "scenario": query_scenario})
+            df_db_projs = pd.read_sql(query_projs, con=engine, params={"company": query_company, "scenario": query_scenario})
 
             if not df_db_inputs.empty and not df_db_projs.empty:
                 def parse_db_val(val, default=0.0):
@@ -310,7 +318,7 @@ def render():
                     st.session_state["active_pv_cash_flows"] = results_db.pv_cash_flows
 
             else:
-                st.warning(f"⚠️ No hay datos guardados para '{company_name}' / '{scenario_name}'. Ve a la Pestaña 1 e insértalos en MySQL.")
+                st.warning(f"⚠️ No hay datos guardados para '{query_company}' / '{query_scenario}'. Ve a la Pestaña 1 e insértalos en MySQL.")
 
         except Exception as db_err:
             st.error(f"❌ Error al procesar datos desde MySQL: {db_err}")
