@@ -16,6 +16,7 @@ class PortfolioController:
         """Guarda o actualiza una cotización de mercado usando conexión nativa."""
         conn = get_db_connection()
         if not conn:
+            print("❌ Error: No se pudo obtener la conexión a la base de datos.")
             return False
 
         try:
@@ -31,7 +32,8 @@ class PortfolioController:
             conn.close()
             return True
         except Exception as e:
-            print(f"Error al guardar cotización: {e}")
+            # ESTO IMPRIMIRÁ EL ERROR EXACTO EN TU TERMINAL O LOGS DE STREAMLIT
+            print(f"❌ ERROR DETALLADO AL INSERTAR EN market_quotes: {repr(e)}")
             if conn:
                 try:
                     conn.rollback()
