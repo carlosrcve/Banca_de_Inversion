@@ -283,6 +283,9 @@ def render():
                 # =============================================================
                 # EXTRACCIÓN DE METADATOS PARA EL ANÁLISIS FINANCIERO DINÁMICO
                 # =============================================================
+                # =============================================================
+                # EXTRACCIÓN DE METADATOS Y ESTADOS FINANCIEROS
+                # =============================================================
                 info = getattr(asset, "info", {})
                 long_name = info.get("longName", symbol)
                 currency = info.get("currency", "USD")
@@ -292,8 +295,30 @@ def render():
                 roe = info.get("returnOnEquity", None)
                 w52_high = info.get("fiftyTwoWeekHigh", None)
                 w52_low = info.get("fiftyTwoWeekLow", None)
+                
+                # Nuevas métricas solicitadas
+                market_cap = info.get("marketCap", None)
+                shares_out = info.get("sharesOutstanding", None)
 
-                # Panel Ejecutivo Inteligente (Responde si está caro/barato y da ganancias)
+                # Obtener ingresos y ganancias del último trimestre reportado
+                q_rev_str, q_net_str = "N/A", "N/A"
+                try:
+                    qf = asset.quarterly_financials
+                    if qf is not None and not qf.empty:
+                        rev_rows = [r for r in qf.index if "Revenue" in str(r)]
+                        net_rows = [r for r in qf.index if "Net Income" in str(r)]
+                        if rev_rows:
+                            val_rev = qf.loc[rev_rows[0]].iloc[0]
+                            if pd.notnull(val_rev):
+                                q_rev_str = f"${val_rev:,.0f}"
+                        if net_rows:
+                            val_net = qf.loc[net_rows[0]].iloc[0]
+                            if pd.notnull(val_net):
+                                q_net_str = f"${val_net:,.0f}"
+                except Exception:
+                    pass
+
+                # Panel Ejecutivo Inteligente (Fila 1: Valuación y Mercado)
                 st.markdown(f"### 💡 Diagnóstico Financiero: **{long_name} ({symbol})**")
                 
                 col_i1, col_i2, col_i3, col_i4 = st.columns(4)
@@ -309,6 +334,19 @@ def render():
                     rec_display = recommendation.replace("_", " ") if recommendation else "NEUTRAL"
                     st.metric("Opinión Wall Street", rec_display, "Consenso de analistas")
 
+                # Panel Ejecutivo Inteligente (Fila 2: Tamaño, Acciones y Resultados Trimestrales)
+                col_j1, col_j2, col_j3, col_j4 = st.columns(4)
+                with col_j1:
+                    mcap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
+                    st.metric("Capitalización Bursátil", mcap_str, "Valor total de mercado")
+                with col_j2:
+                    shares_str = f"{shares_out:,.0f}" if shares_out else "N/A"
+                    st.metric("Acciones en Circulación", shares_str, "Total de títulos vivos")
+                with col_j3:
+                    st.metric("Ingresos Trimestrales", q_rev_str, "Último reporte trimestral")
+                with col_j4:
+                    st.metric("Ganancias Trimestrales", q_net_str, "Utilidad neta trimestral")
+                #---------------------------------------------------------------------------------#
                 # Criterios automáticos de orientación al inversor
                 mensajes_analisis = []
                 if w52_high and w52_low:
