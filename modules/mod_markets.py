@@ -370,6 +370,35 @@ def render():
                         tot_divs_str = "N/A"
                     st.metric("Total Dividendos Pagados", tot_divs_str, "Estimación global anual")
 
+                # =============================================================
+                # EXTRACCIÓN DE DATOS ADICIONALES PARA LA FILA 4
+                # =============================================================
+                profit_margin = info.get("profitMargins", None)
+                debt_to_equity = info.get("debtToEquity", None)
+                pb_ratio = info.get("priceToBook", None)
+                beta = info.get("beta", None)
+
+                # Fila 4 de Métricas: Margen, Deuda, P/B y Volatilidad (Beta)
+                st.write("DEBUG: Cargando fila 4 de métricas (Salud Financiera y Riesgo)...")
+                col_l1, col_l2, col_l3, col_l4 = st.columns(4)
+                
+                with col_l1:
+                    margin_str = f"{profit_margin*100:.1f}%" if profit_margin is not None else "N/A"
+                    st.metric("Margen de Utilidad Neta", margin_str, "Eficiencia en ganancias")
+                
+                with col_l2:
+                    # En yfinance debtToEquity suele venir en porcentaje (ej: 150 = 1.5x) o directo
+                    debt_str = f"{debt_to_equity:.1f}%" if debt_to_equity is not None else "N/A"
+                    st.metric("Deuda / Capital (D/E)", debt_str, "Nivel de apalancamiento")
+                
+                with col_l3:
+                    pb_str = f"{pb_ratio:.2f}x" if pb_ratio is not None else "N/A"
+                    st.metric("Precio / Valor en Libros", pb_str, "Valuación patrimonial")
+                
+                with col_l4:
+                    beta_str = f"{beta:.2f}" if beta is not None else "N/A"
+                    st.metric("Beta (Volatilidad)", beta_str, "Riesgo frente al mercado")
+
                 # Criterios automáticos de orientación al inversor
                 mensajes_analisis = []
                 if w52_high and w52_low:
