@@ -360,7 +360,25 @@ def render():
         "dolar": "USDVES=X",
         "dólar": "USDVES=X",
         "euro bcv": "EURVES=X",
-        "euro": "EURVES=X",
+
+        # --- FOREX / PARES INTERNACIONALES ---
+        "eur/usd": "EURUSD=X",
+        "eurusd": "EURUSD=X",
+        "euro dolar": "EURUSD=X",
+        "gbp/usd": "GBPUSD=X",
+        "gbpusd": "GBPUSD=X",
+        "libra": "GBPUSD=X",
+        "usd/jpy": "USDJPY=X",
+        "usdjpy": "USDJPY=X",
+        "yen": "USDJPY=X",
+        "usd/chf": "USDCHF=X",
+        "usdchf": "USDCHF=X",
+        "aud/usd": "AUDUSD=X",
+        "audusd": "AUDUSD=X",
+        "usd/cad": "USDCAD=X",
+        "usdcad": "USDCAD=X",
+        "nzd/usd": "NZDUSD=X",
+        "nzdusd": "NZDUSD=X",
 
         # --- CRIPTOMONEDAS / MONEDAS DIGITALES ---
         "bitcoin": "BTC-USD",
@@ -443,11 +461,13 @@ def render():
             asset_category = "Crypto"
         elif symbol.startswith("^"):
             asset_category = "Index"
+        elif "=" in symbol:
+            asset_category = "Forex"
         else:
             asset_category = "Equity"
             
     else:
-        # Si el usuario escribe directamente un ticker tradicional o de cripto (ej. AAPL, BTC-USD)
+        # Si el usuario escribe directamente un ticker tradicional o de cripto (ej. AAPL, BTC-USD, EURUSD=X)
         symbol = input_usuario.strip().upper()
         
         if symbol.startswith("^"):
@@ -687,7 +707,7 @@ def render():
                 # =========================================================================
                 # 5. FRAME ESPECIALIZADO: DÓLAR / DIVISAS BANCO CENTRAL (BCV / VES)
                 # =========================================================================
-                elif "VES" in symbol.upper() or "USDVES" in symbol.upper() or "EURVES" in symbol.upper() or asset_category == "Currency":
+                elif "VES" in symbol.upper() or asset_category == "Currency":
                     high_bcv = df_hist['High'].max() if not df_hist.empty else curr_price
                     low_bcv = df_hist['Low'].min() if not df_hist.empty else curr_price
 
@@ -791,7 +811,7 @@ def render():
                         f'</div>'
                     )
 
-                elif "VES" in symbol.upper() or "USDVES" in symbol.upper() or "EURVES" in symbol.upper() or asset_category == "Currency":
+                elif "VES" in symbol.upper() or asset_category == "Currency":
                     html_interpretation = (
                         f'<div style="background-color: #fce4ec; border-left: 5px solid #e91e63; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
                         f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #c2185b;">📝 Diagnóstico Cambiario Oficial (Banco Central):</div>'
