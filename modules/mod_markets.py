@@ -250,6 +250,36 @@ def render():
             else:
                 st.error("❌ Error al guardar en TiDB Cloud.")
 
+    # -------------------------------------------------------------------------
+    # 4. CATEGORÍA DIVISAS Y TIPO DE CAMBIO (BCV VENEZUELA)
+    # -------------------------------------------------------------------------
+    with col_m4:
+        st.subheader("🇻🇪 Divisas y BCV")
+        dict_divisas = {
+            "Dólar Oficial (BCV)": "USDVES=X",
+            "Euro Oficial (BCV)": "EURVES=X",
+        }
+        selected_divisa_name = st.selectbox(
+            "Seleccione la Divisa:", list(dict_divisas.keys()), key="sel_divisa"
+        )
+        divisa_ticker = dict_divisas[selected_divisa_name]
+
+        # Obtenemos la tasa con la misma función snapshot
+        d_price, d_chg = get_ticker_snapshot(divisa_ticker)
+        
+        # Formato visual adaptado para bolívares (VES)
+        price_str = f"Bs. {d_price:,.2f}" if d_price and d_price > 0 else "Bs. S/D"
+        st.metric(selected_divisa_name, price_str, f"{d_chg:+.2f}%")
+
+        if st.button(f"💾 Guardar {selected_divisa_name}", key="save_divisa_btn"):
+            success, err_msg = PortfolioController.save_market_quote(
+                divisa_ticker, selected_divisa_name, "Currency", d_price, d_chg
+            )
+            if success:
+                st.success(f"✅ {selected_divisa_name} guardado en TiDB.")
+            else:
+                st.error(f"❌ Error al guardar: {err_msg}")
+
     st.markdown("---")
 
     # -------------------------------------------------------------------------
