@@ -231,50 +231,42 @@ class PortfolioController:
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
     ) -> bool:
-        """Crea un nuevo portafolio e inserta sus activos usando tus columnas reales ('name', 'ticker', etc.)."""
-        conn = get_secure_db_connection()
-        if not conn:
-            return False
-
+        """Crea un nuevo portafolio e inserta sus activos usando SQLAlchemy autónomo."""
         try:
-            cursor = conn.cursor()
-            query_portfolio = """
-                INSERT INTO portfolios (name, description)
-                VALUES (%s, %s)
-            """
-            cursor.execute(query_portfolio, (portfolio_name, description))
-            portfolio_id = cursor.lastrowid
+            engine = get_sqlalchemy_engine()
+            with engine.begin() as conn:
+                # 1. Insertar el portafolio y obtener su ID generado
+                query_portfolio = text("""
+                    INSERT INTO portfolios (name, description)
+                    VALUES (:name, :description)
+                """)
+                result = conn.execute(query_portfolio, {
+                    "name": portfolio_name,
+                    "description": description
+                })
+                portfolio_id = result.lastrowid
 
-            query_asset = """
-                INSERT INTO portfolio_assets (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """
-            for item in assets:
-                cursor.execute(
-                    query_asset,
-                    (
-                        portfolio_id,
-                        item["symbol"],         
-                        item["asset_name"],
-                        item["asset_type"],     
-                        item["quantity"],
-                        item["purchase_price"],
-                        item["purchase_date"],  
-                    ),
-                )
-
-            conn.commit()
-            cursor.close()
-            conn.close()
+                # 2. Insertar todos los activos asociados en bucle
+                query_asset = text("""
+                    INSERT INTO portfolio_assets 
+                    (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
+                    VALUES (:portfolio_id, :ticker, :asset_name, :asset_class, :quantity, :purchase_price, :acquisition_date)
+                """)
+                
+                for item in assets:
+                    conn.execute(query_asset, {
+                        "portfolio_id": portfolio_id,
+                        "ticker": item["symbol"],
+                        "asset_name": item["asset_name"],
+                        "asset_class": item["asset_type"],
+                        "quantity": item["quantity"],
+                        "purchase_price": item["purchase_price"],
+                        "acquisition_date": item["purchase_date"]
+                    })
+                    
             return True
         except Exception as e:
-            print(f"❌ Error detallado al crear el portafolio en TiDB: {e}")
-            if conn:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-                conn.close()
+            print(f"❌ Error al crear el portafolio: {e}")
             return False
 
     @staticmethod
