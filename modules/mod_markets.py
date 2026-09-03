@@ -333,6 +333,7 @@ def render():
                     st.metric("Opinión Wall Street", rec_display, "Consenso de analistas")
 
                 # Fila 2 de Métricas: Tamaño, Acciones y Resultados Trimestrales
+                st.write("DEBUG: Cargando fila 2 de métricas...") # <--- Línea temporal de prueba
                 col_j1, col_j2, col_j3, col_j4 = st.columns(4)
                 with col_j1:
                     mcap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
