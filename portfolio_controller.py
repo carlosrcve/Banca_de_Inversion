@@ -248,14 +248,14 @@ class PortfolioController:
 
                 query_asset = text("""
                     INSERT INTO portfolio_assets 
-                    (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
-                    VALUES (:portfolio_id, :ticker, :asset_name, :asset_class, :quantity, :purchase_price, :acquisition_date)
+                    (portfolio_id, symbol, asset_name, asset_class, quantity, purchase_price, acquisition_date)
+                    VALUES (:portfolio_id, :symbol, :asset_name, :asset_class, :quantity, :purchase_price, :acquisition_date)
                 """)
                 
                 for item in assets:
                     conn.execute(query_asset, {
                         "portfolio_id": portfolio_id,
-                        "ticker": item.get("symbol") or item.get("ticker"),
+                        "symbol": item.get("symbol") or item.get("ticker"),  # <--- Aseguramos la llave correcta
                         "asset_name": item.get("asset_name"),
                         "asset_class": item.get("asset_type") or item.get("asset_class"),
                         "quantity": item.get("quantity"),
