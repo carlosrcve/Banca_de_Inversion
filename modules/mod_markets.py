@@ -347,132 +347,296 @@ def render():
             if not df_hist.empty:
                 curr_price, chg_pct = get_ticker_snapshot(symbol)
 
-                # METADATOS Y ESTADOS FINANCIEROS
-                info = getattr(asset, "info", {})
-                long_name = info.get("longName", symbol)
-                currency = info.get("currency", "USD")
-                pe_ratio = info.get("trailingPE", None)
-                target_price = info.get("targetMeanPrice", None)
-                recommendation = info.get("recommendationKey", "N/A").upper()
-                roe = info.get("returnOnEquity", None)
-                w52_high = info.get("fiftyTwoWeekHigh", None)
-                w52_low = info.get("fiftyTwoWeekLow", None)
-                
-                market_cap = info.get("marketCap", None)
-                shares_out = info.get("sharesOutstanding", None)
-                eps = info.get("trailingEps", None)
-                dividend_rate = info.get("dividendRate", None)
-                dividend_yield = info.get("dividendYield", None)
-
-                q_rev_str, q_net_str = "N/A", "N/A"
-                try:
-                    qf = asset.quarterly_financials
-                    if qf is not None and not qf.empty:
-                        rev_rows = [r for r in qf.index if "Revenue" in str(r)]
-                        net_rows = [r for r in qf.index if "Net Income" in str(r)]
-                        if rev_rows:
-                            val_rev = qf.loc[rev_rows[0]].iloc[0]
-                            if pd.notnull(val_rev):
-                                q_rev_str = f"${val_rev:,.0f}"
-                        if net_rows:
-                            val_net = qf.loc[net_rows[0]].iloc[0]
-                            if pd.notnull(val_net):
-                                q_net_str = f"${val_net:,.0f}"
-                except Exception:
-                    pass
-
-                # PANEL EJECUTIVO INTELIGENTE
-                st.markdown(f"### 💡 Diagnóstico Financiero: **{long_name} ({symbol})**")
-                
-                # Fila 1
-                col_i1, col_i2, col_i3, col_i4 = st.columns(4)
-                with col_i1:
-                    st.metric("Precio Actual", f"${curr_price:,.2f} {currency}", f"{chg_pct:+.2f}%")
-                with col_i2:
-                    pe_str = f"{pe_ratio:.1f}x" if pe_ratio else "N/A"
-                    st.metric("P/E Ratio (Valuación)", pe_str, "Caro > 35 / Barato < 15")
-                with col_i3:
-                    roe_str = f"{roe*100:.1f}%" if roe else "N/A"
-                    st.metric("ROE (¿Da Ganancias?)", roe_str, "Eficiencia del capital")
-                with col_i4:
-                    rec_display = recommendation.replace("_", " ") if recommendation else "NEUTRAL"
-                    st.metric("Opinión Wall Street", rec_display, "Consenso de analistas")
-
-                # Fila 2
-                col_j1, col_j2, col_j3, col_j4 = st.columns(4)
-                with col_j1:
-                    mcap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
-                    st.metric("Capitalización Bursátil", mcap_str, "Valor total de mercado")
-                with col_j2:
-                    shares_str = f"{shares_out:,.0f}" if shares_out else "N/A"
-                    st.metric("Acciones en Circulación", shares_str, "Total de títulos vivos")
-                with col_j3:
-                    st.metric("Ingresos Trimestrales", q_rev_str, "Último reporte trimestral")
-                with col_j4:
-                    st.metric("Ganancias Trimestrales", q_net_str, "Utilidad neta trimestral")
-
-                # Fila 3
-                col_k1, col_k2, col_k3, col_k4 = st.columns(4)
-                with col_k1:
-                    eps_str = f"${eps:,.2f}" if eps is not None else "N/A"
-                    st.metric("Utilidad por Acción (EPS)", eps_str, "Ganancia neta por título")
-                with col_k2:
-                    div_rate_str = f"${dividend_rate:,.2f}" if dividend_rate is not None else "$0.00"
-                    st.metric("Dividendo Anual / Acción", div_rate_str, "Pago anual al inversor")
-                with col_k3:
-                    div_yield_str = f"{dividend_yield*100:.2f}%" if dividend_yield is not None else "0.00%"
-                    st.metric("Rendimiento por Dividendo", div_yield_str, "Yield porcentual anual")
-                with col_k4:
-                    if dividend_rate is not None and shares_out is not None:
-                        total_divs = dividend_rate * shares_out
-                        tot_divs_str = f"${total_divs:,.0f}"
+                # ==========================================
+                # PEGA LA DETECCIÓN AUTOMÁTICA AQUÍ 👇
+                # ==========================================
+                symbol_upper = symbol.upper()
+                if "=" in symbol_upper or "-USD" in symbol_upper:
+                    if any(m in symbol_upper for m in ["GC", "SI", "CL", "HG", "PL"]):
+                        asset_category = "Commodity"
+                    elif "VES" in symbol_upper:
+                        asset_category = "Currency"
                     else:
-                        tot_divs_str = "N/A"
-                    st.metric("Total Dividendos Pagados", tot_divs_str, "Estimación global anual")
+                        asset_category = "Forex"
+                elif symbol_upper.startswith("^"):
+                    asset_category = "Index"
+                else:
+                    asset_category = "Equity"
+                # ==========================================
 
-                # Fila 4
-                profit_margin = info.get("profitMargins", None)
-                debt_to_equity = info.get("debtToEquity", None)
-                pb_ratio = info.get("priceToBook", None)
-                beta = info.get("beta", None)
+                # METADATOS COMUNES
+                info = getattr(asset, "info", {})
+                long_name = info.get("longName", info.get("shortName", symbol))
+                currency = info.get("currency", "USD")
+                
+                # Definición de variables preventivas para evitar errores en métricas o análisis
+                target_price = info.get("targetMeanPrice", None)
 
-                col_l1, col_l2, col_l3, col_l4 = st.columns(4)
-                with col_l1:
-                    margin_str = f"{profit_margin*100:.1f}%" if profit_margin is not None else "N/A"
-                    st.metric("Margen de Utilidad Neta", margin_str, "Eficiencia en ganancias")
-                with col_l2:
-                    debt_str = f"{debt_to_equity:.1f}%" if debt_to_equity is not None else "N/A"
-                    st.metric("Deuda / Capital (D/E)", debt_str, "Nivel de apalancamiento")
-                with col_l3:
-                    pb_str = f"{pb_ratio:.2f}x" if pb_ratio is not None else "N/A"
-                    st.metric("Precio / Valor en Libros", pb_str, "Valuación patrimonial")
-                with col_l4:
-                    beta_str = f"{beta:.2f}" if beta is not None else "N/A"
-                    st.metric("Beta (Volatilidad)", beta_str, "Riesgo frente al mercado")
+                st.markdown(f"### 💡 Diagnóstico Financiero: **{long_name} ({symbol})**")
 
+                # =========================================================================
+                # 1. FRAME ESPECIALIZADO: ACCIONES (EQUITY)
+                # =========================================================================
+                if asset_category == "Equity":
+                    pe_ratio = info.get("trailingPE", None)
+                    recommendation = info.get("recommendationKey", "N/A").upper()
+                    roe = info.get("returnOnEquity", None)
+                    market_cap = info.get("marketCap", None)
+                    shares_out = info.get("sharesOutstanding", None)
+                    eps = info.get("trailingEps", None)
+                    dividend_rate = info.get("dividendRate", None)
+                    dividend_yield = info.get("dividendYield", None)
+
+                    q_rev_str, q_net_str = "N/A", "N/A"
+                    try:
+                        qf = asset.quarterly_financials
+                        if qf is not None and not qf.empty:
+                            rev_rows = [r for r in qf.index if "Revenue" in str(r)]
+                            net_rows = [r for r in qf.index if "Net Income" in str(r)]
+                            if rev_rows:
+                                val_rev = qf.loc[rev_rows[0]].iloc[0]
+                                if pd.notnull(val_rev):
+                                    q_rev_str = f"${val_rev:,.0f}"
+                            if net_rows:
+                                val_net = qf.loc[net_rows[0]].iloc[0]
+                                if pd.notnull(val_net):
+                                    q_net_str = f"${val_net:,.0f}"
+                    except Exception:
+                        pass
+
+                    # Fila 1 Acciones
+                    col_i1, col_i2, col_i3, col_i4 = st.columns(4)
+                    with col_i1:
+                        st.metric("Precio Actual", f"${curr_price:,.2f} {currency}", f"{chg_pct:+.2f}%")
+                    with col_i2:
+                        pe_str = f"{pe_ratio:.1f}x" if pe_ratio else "N/A"
+                        st.metric("P/E Ratio (Valuación)", pe_str, "Caro > 35 / Barato < 15")
+                    with col_i3:
+                        roe_str = f"{roe*100:.1f}%" if roe else "N/A"
+                        st.metric("ROE (¿Da Ganancias?)", roe_str, "Eficiencia del capital")
+                    with col_i4:
+                        rec_display = recommendation.replace("_", " ") if recommendation else "NEUTRAL"
+                        st.metric("Opinión Wall Street", rec_display, "Consenso de analistas")
+
+                    # Fila 2 Acciones
+                    col_j1, col_j2, col_j3, col_j4 = st.columns(4)
+                    with col_j1:
+                        mcap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
+                        st.metric("Capitalización Bursátil", mcap_str, "Valor total de mercado")
+                    with col_j2:
+                        shares_str = f"{shares_out:,.0f}" if shares_out else "N/A"
+                        st.metric("Acciones en Circulación", shares_str, "Total de títulos vivos")
+                    with col_j3:
+                        st.metric("Ingresos Trimestrales", q_rev_str, "Último reporte trimestral")
+                    with col_j4:
+                        st.metric("Ganancias Trimestrales", q_net_str, "Utilidad neta trimestral")
+
+                    # Fila 3 Acciones
+                    col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+                    with col_k1:
+                        eps_str = f"${eps:,.2f}" if eps is not None else "N/A"
+                        st.metric("Utilidad por Acción (EPS)", eps_str, "Ganancia neta por título")
+                    with col_k2:
+                        div_rate_str = f"${dividend_rate:,.2f}" if dividend_rate is not None else "$0.00"
+                        st.metric("Dividendo Anual / Acción", div_rate_str, "Pago anual al inversor")
+                    with col_k3:
+                        div_yield_str = f"{dividend_yield*100:.2f}%" if dividend_yield is not None else "0.00%"
+                        st.metric("Rendimiento por Dividendo", div_yield_str, "Yield porcentual anual")
+                    with col_k4:
+                        if dividend_rate is not None and shares_out is not None:
+                            total_divs = dividend_rate * shares_out
+                            tot_divs_str = f"${total_divs:,.0f}"
+                        else:
+                            tot_divs_str = "N/A"
+                        st.metric("Total Dividendos Pagados", tot_divs_str, "Estimación global anual")
+
+                    # Fila 4 Acciones
+                    profit_margin = info.get("profitMargins", None)
+                    debt_to_equity = info.get("debtToEquity", None)
+                    pb_ratio = info.get("priceToBook", None)
+                    beta = info.get("beta", None)
+
+                    col_l1, col_l2, col_l3, col_l4 = st.columns(4)
+                    with col_l1:
+                        margin_str = f"{profit_margin*100:.1f}%" if profit_margin is not None else "N/A"
+                        st.metric("Margen de Utilidad Neta", margin_str, "Eficiencia en ganancias")
+                    with col_l2:
+                        debt_str = f"{debt_to_equity:.1f}%" if debt_to_equity is not None else "N/A"
+                        st.metric("Deuda / Capital (D/E)", debt_str, "Nivel de apalancamiento")
+                    with col_l3:
+                        pb_str = f"{pb_ratio:.2f}x" if pb_ratio is not None else "N/A"
+                        st.metric("Precio / Valor en Libros", pb_str, "Valuación patrimonial")
+                    with col_l4:
+                        beta_str = f"{beta:.2f}" if beta is not None else "N/A"
+                        st.metric("Beta (Volatilidad)", beta_str, "Riesgo frente al mercado")
+
+                    st.markdown("---")
+                    html_interpretation = (
+                        '<div style="background-color: #e8f4f8; border-left: 5px solid #29b6f6; padding: 18px 20px; border-radius: 8px; color: #1a202c; margin-bottom: 20px;">'
+                        '<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">📝 Diagnóstico Ejecutivo de Acciones (Equity):</div>'
+                        '<p style="margin: 0; line-height: 1.6;">Evaluación integral basada en múltiplos de valuación (P/E, P/B), eficiencia de capital (ROE), estructura de deuda y directrices de consenso de Wall Street.</p>'
+                        '</div>'
+                    )
+
+                # =========================================================================
+                # 2. FRAME ESPECIALIZADO: METALES Y COMMODITIES (METALS)
+                # =========================================================================
+                elif asset_category == "Commodity":
+                    volume = info.get("volume", 0)
+                    high_period = df_hist['High'].max() if not df_hist.empty else 0
+                    low_period = df_hist['Low'].min() if not df_hist.empty else 0
+
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1: st.metric("Cotización Spot", f"${curr_price:,.2f} USD", f"{chg_pct:+.2f}%")
+                    with c2: st.metric("Máximo del Periodo", f"${high_period:,.2f}", "Techo técnico temporal")
+                    with c3: st.metric("Mínimo del Periodo", f"${low_period:,.2f}", "Piso temporal")
+                    with c4: st.metric("Volumen Negociado", f"{volume:,.0f}" if volume else "N/A", "Liquidez de mercado")
+
+                    st.markdown("---")
+                    html_interpretation = (
+                        '<div style="background-color: #fff9e6; border-left: 5px solid #ffb300; padding: 18px 20px; border-radius: 8px; color: #1a202c; margin-bottom: 20px;">'
+                        '<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #f57c00;">📝 Diagnóstico Especializado de Commodities / Metales:</div>'
+                        '<p style="margin: 0; line-height: 1.6;">Activos tangibles de cobertura contra la inflación y refugio geopolítico. Su comportamiento está dictado por los flujos de contratos de futuros, la oferta física y las expectativas monetarias globales.</p>'
+                        '</div>'
+                    )
+
+                # =========================================================================
+                # 3. FRAME ESPECIALIZADO: ÍNDICES BURSÁTILES (INDEX)
+                # =========================================================================
+                elif asset_category == "Index":
+                    high_index = df_hist['High'].max() if not df_hist.empty else 0
+                    low_index = df_hist['Low'].min() if not df_hist.empty else 0
+
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1: st.metric("Nivel del Índice", f"{curr_price:,.2f} pts", f"{chg_pct:+.2f}%")
+                    with c2: st.metric("Máximo del Rango", f"{high_index:,.2f} pts", "Máximo en el periodo")
+                    with c3: st.metric("Mínimo del Rango", f"{low_index:,.2f} pts", "Mínimo en el periodo")
+                    with c4: st.metric("Estado de Tendencia", "Expansión / Alcista" if chg_pct >= 0 else "Contracción / Recorte", "Sentimiento general")
+
+                    st.markdown("---")
+                    html_interpretation = (
+                        '<div style="background-color: #e8f8f0; border-left: 5px solid #2e7d32; padding: 18px 20px; border-radius: 8px; color: #1a202c; margin-bottom: 20px;">'
+                        '<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #2e7d32;">📝 Diagnóstico de Índice Bursátil de Referencia:</div>'
+                        '<p style="margin: 0; line-height: 1.6;">Termómetro agregado del mercado accionario o sectorial. Refleja la salud general de las principales empresas que lo componen y la dirección del apetito de riesgo institucional.</p>'
+                        '</div>'
+                    )
+
+                # =========================================================================
+                # 4. FRAME ESPECIALIZADO: DÓLAR / DIVISAS BANCO CENTRAL (BCV / VES)
+                # =========================================================================
+                elif "VES" in symbol.upper() or "USDVES" in symbol.upper() or "EURVES" in symbol.upper() or asset_category == "Currency":
+                    high_bcv = df_hist['High'].max() if not df_hist.empty else curr_price
+                    low_bcv = df_hist['Low'].min() if not df_hist.empty else curr_price
+
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1: st.metric("Tasa Oficial BCV", f"Bs. {curr_price:,.4f}", f"{chg_pct:+.2f}%")
+                    with c2: st.metric("Máximo en Periodo", f"Bs. {high_bcv:,.4f}", "Techo cambiario oficial")
+                    with c3: st.metric("Mínimo en Periodo", f"Bs. {low_bcv:,.4f}", "Piso cambiario oficial")
+                    with c4: st.metric("Tipo de Referencia", "Oficial / BCV", "Tasa legal de intercambio")
+
+                    st.markdown("---")
+                    html_interpretation = (
+                        '<div style="background-color: #fce4ec; border-left: 5px solid #e91e63; padding: 18px 20px; border-radius: 8px; color: #1a202c; margin-bottom: 20px;">'
+                        '<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #c2185b;">📝 Diagnóstico Cambiario Oficial (Banco Central):</div>'
+                        '<p style="margin: 0; line-height: 1.6;">Seguimiento riguroso de la paridad oficial establecida por el ente emisor. Vital para la indexación contable, conversiones financieras corporativas y el cálculo de obligaciones fiscales locales bajo normativa venezolana.</p>'
+                        '</div>'
+                    )
+
+                # =========================================================================
+                # 5. FRAME ESPECIALIZADO: MERCADO FOREX GLOBAL (PARES INTERNACIONALES)
+                # =========================================================================
+                else:
+                    high_fx = df_hist['High'].max() if not df_hist.empty else curr_price
+                    low_fx = df_hist['Low'].min() if not df_hist.empty else curr_price
+
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1: st.metric("Tasa de Cambio Forex", f"{curr_price:,.4f}", f"{chg_pct:+.2f}%")
+                    with c2: st.metric("Máximo del Par", f"{high_fx:,.4f}", "Resistencia en el periodo")
+                    with c3: st.metric("Mínimo del Par", f"{low_fx:,.4f}", "Soporte en el periodo")
+                    with c4: st.metric("Mercado Divisas", symbol, "Par internacional negociado")
+
+                    st.markdown("---")
+                    html_interpretation = (
+                        '<div style="background-color: #f3e5f5; border-left: 5px solid #7b1fa2; padding: 18px 20px; border-radius: 8px; color: #1a202c; margin-bottom: 20px;">'
+                        '<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #7b1fa2;">📝 Diagnóstico de Mercado Forex (Divisas Globales):</div>'
+                        '<p style="margin: 0; line-height: 1.6;">Análisis de la fortaleza relativa entre economías globales. Evalúa la fluctuación de tipos de interés cruzados, políticas monetarias de bancos centrales internacionales y flujos de comercio exterior.</p>'
+                        '</div>'
+                    )
+
+                # Renderizar cuadro de interpretación final y continuar con gráficos o componentes
+                st.markdown(html_interpretation, unsafe_allow_html=True)
                 st.markdown("---")
 
                 # =============================================================
                 # GENERACIÓN DE ANÁLISIS TÉCNICO Y PEDAGÓGICO AVANZADO (HTML)
                 # =============================================================
-                pe_text = f"Con un P/E de {pe_ratio:.1f}x y un P/B de {pb_ratio:.2f}x, la acción cotiza con una prima exigente, reflejando altas expectativas de crecimiento futuro." if pe_ratio and pe_ratio > 30 else f"P/E de {pe_ratio:.1f}x y P/B de {pb_ratio:.2f}x, sugiriendo una valoración equilibrada frente a sus fundamentales."
-                roe_text = f"Destacada eficiencia en la generación de valor con un ROE del {(roe*100):.1f}% y un margen neto del {(profit_margin*100):.1f}%, demostrando un sólido poder de fijación de precios y control de costos." if roe and profit_margin else "Rentabilidad bajo revisión por falta de datos históricos completos."
-                risk_text = f"Nivel de apalancamiento (Deuda/Capital) ubicado en un sano {debt_to_equity:.1f}%. El coeficiente Beta de {beta:.2f} indica una volatilidad superior a la media del mercado, ideal para estrategias dinámicas." if debt_to_equity is not None and beta is not None else "Perfil de riesgo moderado bajo las condiciones actuales del sector."
-                
-                potencial = ((target_price - curr_price) / curr_price) * 100 if target_price and target_price > 0 else 0.0
-                target_text = f"El consenso de analistas (Opinión: <b>{recommendation.replace('_', ' ')}</b>) proyecta un precio objetivo medio de <b>${target_price:,.2f}</b>, lo que representa un potencial de retorno estimado de <b>{potencial:+.1f}%</b> desde el precio actual." if target_price else "Sin cobertura de precio objetivo activo por el consenso."
+                if asset_category == "Equity":
+                    pe_text = f"Con un P/E de {pe_ratio:.1f}x y un P/B de {pb_ratio:.2f}x, la acción cotiza con una prima exigente, reflejando altas expectativas de crecimiento futuro." if pe_ratio and pb_ratio and pe_ratio > 30 else f"P/E de {pe_ratio:.1f}x y P/B de {pb_ratio:.2f}x, sugiriendo una valoración equilibrada frente a sus fundamentales."
+                    roe_text = f"Destacada eficiencia en la generación de valor con un ROE del {(roe*100):.1f}% y un margen neto del {(profit_margin*100):.1f}%, demostrando un sólido poder de fijación de precios y control de costos." if roe and profit_margin else "Rentabilidad bajo revisión por falta de datos históricos completos."
+                    risk_text = f"Nivel de apalancamiento (Deuda/Capital) ubicado en un sano {debt_to_equity:.1f}%. El coeficiente Beta de {beta:.2f} indica una volatilidad superior a la media del mercado, ideal para estrategias dinámicas." if debt_to_equity is not None and beta is not None else "Perfil de riesgo moderado bajo las condiciones actuales del sector."
+                    
+                    potencial = ((target_price - curr_price) / curr_price) * 100 if target_price and target_price > 0 else 0.0
+                    target_text = f"El consenso de analistas (Opinión: <b>{recommendation.replace('_', ' ')}</b>) proyecta un precio objetivo medio de <b>${target_price:,.2f}</b>, lo que representa un potencial de retorno estimado de <b>{potencial:+.1f}%</b> desde el precio actual." if target_price else "Sin cobertura de precio objetivo activo por el consenso."
 
-                html_interpretation = (
-                    f'<div style="background-color: #e8f4f8; border-left: 5px solid #29b6f6; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
-                    f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">📝 Diagnóstico Financiero Integral y Análisis Técnico:</div>'
-                    f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
-                    f'<li style="margin-bottom: 8px;"><b>🏢 Valuación y Múltiplos de Mercado:</b> {pe_text}</li>'
-                    f'<li style="margin-bottom: 8px;"><b>📈 Rentabilidad y Calidad Operativa:</b> {roe_text}</li>'
-                    f'<li style="margin-bottom: 8px;"><b>⚖️ Estructura de Capital y Riesgo Sistemático (Beta):</b> {risk_text}</li>'
-                    f'<li style="margin-bottom: 0px;"><b>🎯 Perspectiva de Wall Street y Consenso:</b> {target_text}</li>'
-                    f'</ul>'
-                    f'</div>'
-                )
+                    html_interpretation = (
+                        f'<div style="background-color: #e8f4f8; border-left: 5px solid #29b6f6; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">📝 Diagnóstico Financiero Integral y Análisis Técnico (Equity):</div>'
+                        f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
+                        f'<li style="margin-bottom: 8px;"><b>🏢 Valuación y Múltiplos de Mercado:</b> {pe_text}</li>'
+                        f'<li style="margin-bottom: 8px;"><b>📈 Rentabilidad y Calidad Operativa:</b> {roe_text}</li>'
+                        f'<li style="margin-bottom: 8px;"><b>⚖️ Estructura de Capital y Riesgo Sistemático (Beta):</b> {risk_text}</li>'
+                        f'<li style="margin-bottom: 0px;"><b>🎯 Perspectiva de Wall Street y Consenso:</b> {target_text}</li>'
+                        f'</ul>'
+                        f'</div>'
+                    )
+
+                elif asset_category == "Commodity":
+                    range_comm = high_period - low_period if 'high_period' in locals() and 'low_period' in locals() else 0
+                    comm_text = f"La volatilidad del periodo muestra una amplitud de ${range_comm:,.2f} entre soportes y resistencias temporales, reflejando presiones de oferta y demanda física."
+                    
+                    html_interpretation = (
+                        f'<div style="background-color: #fff9e6; border-left: 5px solid #ffb300; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #f57c00;">📝 Diagnóstico Especializado de Commodities / Metales:</div>'
+                        f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
+                        f'<li style="margin-bottom: 8px;"><b>🛡️ Cobertura y Refugio:</b> Activos tangibles utilizados tradicionalmente para mitigar los efectos de la inflación y las tensiones geopolíticas globales.</li>'
+                        f'<li style="margin-bottom: 0px;"><b>📊 Comportamiento de Rango:</b> {comm_text}</li>'
+                        f'</ul>'
+                        f'</div>'
+                    )
+
+                elif asset_category == "Index":
+                    trend_msg = "alcista / expansiva" if chg_pct >= 0 else "bajista / de contracción"
+                    html_interpretation = (
+                        f'<div style="background-color: #e8f8f0; border-left: 5px solid #2e7d32; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #2e7d32;">📝 Diagnóstico de Índice Bursátil de Referencia:</div>'
+                        f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
+                        f'<li style="margin-bottom: 8px;"><b>🌐 Sentimiento de Mercado:</b> El índice opera bajo una tónica {trend_msg}, sirviendo como termómetro directo del apetito de riesgo institucional.</li>'
+                        f'<li style="margin-bottom: 0px;"><b>📈 Diversificación Agregada:</b> Su desempeño resume la salud financiera de las principales capitalizaciones que lo integran.</li>'
+                        f'</ul>'
+                        f'</div>'
+                    )
+
+                elif "VES" in symbol.upper() or "USDVES" in symbol.upper() or "EURVES" in symbol.upper() or asset_category == "Currency":
+                    html_interpretation = (
+                        f'<div style="background-color: #fce4ec; border-left: 5px solid #e91e63; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #c2185b;">📝 Diagnóstico Cambiario Oficial (Banco Central):</div>'
+                        f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
+                        f'<li style="margin-bottom: 8px;"><b>📌 Obligaciones Legales y Fiscales:</b> Tasa de referencia obligatoria para la emisión de facturación formal, cálculos impositivos y presentación de estados financieros en bolívares.</li>'
+                        f'<li style="margin-bottom: 0px;"><b>🔄 Paridad Oficial:</b> Monitoreo estricto de la política cambiaria del emisor para la correcta conversión contable corporativa.</li>'
+                        f'</ul>'
+                        f'</div>'
+                    )
+
+                else:
+                    html_interpretation = (
+                        f'<div style="background-color: #f3e5f5; border-left: 5px solid #7b1fa2; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #7b1fa2;">📝 Diagnóstico de Mercado Forex (Divisas Globales):</div>'
+                        f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
+                        f'<li style="margin-bottom: 8px;"><b>💱 Fortaleza Relativa:</b> Análisis cruzado de tipos de interés y flujos de capital entre economías internacionales.</li>'
+                        f'<li style="margin-bottom: 0px;"><b>🌍 Dinámica Macroeconómica:</b> Sensible a publicaciones de bancos centrales, datos de empleo y balanzas comerciales.</li>'
+                        f'</ul>'
+                        f'</div>'
+                    )
 
                 st.markdown(html_interpretation, unsafe_allow_html=True)
                 st.markdown("---")
