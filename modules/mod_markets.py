@@ -320,17 +320,17 @@ def render():
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS
+    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS (BLOQUE UNIFICADO)
     # -------------------------------------------------------------------------
     st.subheader("🔍 Buscador & Asesor Inteligente de Activos")
 
     col_search1, col_search2 = st.columns([3, 1])
     with col_search1:
-        symbol = st.text_input(
-            "Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, NVDA, TSLA, GC=F, ^IXIC, BTC-USD):",
-            value="NVDA",
+        input_usuario = st.text_input(
+            "Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, NVDA, Oro, Dolar BCV, S&P 500):",
+            value="Oro",
             key="input_search_symbol",
-        ).strip().upper()
+        )
     with col_search2:
         period = st.selectbox(
             "Rango de Tiempo",
@@ -338,9 +338,6 @@ def render():
             index=3,
             key="select_search_period",
         )
-
-    # 1. Entrada de texto del usuario
-    input_usuario = st.text_input("Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, Oro, Dolar BCV, S&P 500):", "Oro")
 
     # 2. Diccionario ampliado de lenguaje natural a Tickers de Yahoo Finance
     traductor_global = {
