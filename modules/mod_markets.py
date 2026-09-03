@@ -253,7 +253,7 @@ def render():
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS (CON INTELIGENCIA FINANCIERA)
+    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS (CON INTELIGENCIA FINANCIERA COMPLETA)
     # -------------------------------------------------------------------------
     st.subheader("🔍 Buscador & Asesor Inteligente de Activos")
 
@@ -281,10 +281,7 @@ def render():
                 curr_price, chg_pct = get_ticker_snapshot(symbol)
 
                 # =============================================================
-                # EXTRACCIÓN DE METADATOS PARA EL ANÁLISIS FINANCIERO DINÁMICO
-                # =============================================================
-                # =============================================================
-                # EXTRACCIÓN DE METADATOS Y ESTADOS FINANCIEROS
+                # EXTRACCIÓN DE METADATOS Y ESTADOS FINANCIEROS COMPLETOS
                 # =============================================================
                 info = getattr(asset, "info", {})
                 long_name = info.get("longName", symbol)
@@ -296,7 +293,7 @@ def render():
                 w52_high = info.get("fiftyTwoWeekHigh", None)
                 w52_low = info.get("fiftyTwoWeekLow", None)
                 
-                # Nuevas métricas solicitadas
+                # Métricas corporativas y financieras solicitadas
                 market_cap = info.get("marketCap", None)
                 shares_out = info.get("sharesOutstanding", None)
 
@@ -318,9 +315,10 @@ def render():
                 except Exception:
                     pass
 
-                # Panel Ejecutivo Inteligente (Fila 1: Valuación y Mercado)
+                # Panel Ejecutivo Inteligente
                 st.markdown(f"### 💡 Diagnóstico Financiero: **{long_name} ({symbol})**")
                 
+                # Fila 1 de Métricas: Valuación, Rentabilidad y Opinión
                 col_i1, col_i2, col_i3, col_i4 = st.columns(4)
                 with col_i1:
                     st.metric("Precio Actual", f"${curr_price:,.2f} {currency}", f"{chg_pct:+.2f}%")
@@ -334,7 +332,7 @@ def render():
                     rec_display = recommendation.replace("_", " ") if recommendation else "NEUTRAL"
                     st.metric("Opinión Wall Street", rec_display, "Consenso de analistas")
 
-                # Panel Ejecutivo Inteligente (Fila 2: Tamaño, Acciones y Resultados Trimestrales)
+                # Fila 2 de Métricas: Tamaño, Acciones y Resultados Trimestrales
                 col_j1, col_j2, col_j3, col_j4 = st.columns(4)
                 with col_j1:
                     mcap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
@@ -346,7 +344,7 @@ def render():
                     st.metric("Ingresos Trimestrales", q_rev_str, "Último reporte trimestral")
                 with col_j4:
                     st.metric("Ganancias Trimestrales", q_net_str, "Utilidad neta trimestral")
-                #---------------------------------------------------------------------------------#
+
                 # Criterios automáticos de orientación al inversor
                 mensajes_analisis = []
                 if w52_high and w52_low:
