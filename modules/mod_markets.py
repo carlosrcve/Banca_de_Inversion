@@ -346,6 +346,27 @@ def render():
                 with col_j4:
                     st.metric("Ganancias Trimestrales", q_net_str, "Utilidad neta trimestral")
 
+                # Fila 3 de Métricas: Dividendos y Utilidad por Acción (EPS)
+                st.write("DEBUG: Cargando fila 3 de métricas (Dividendos y EPS)...")
+                col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+                with col_k1:
+                    eps_str = f"${eps:,.2f}" if eps is not None else "N/A"
+                    st.metric("Utilidad por Acción (EPS)", eps_str, "Ganancia neta por título")
+                with col_k2:
+                    div_rate_str = f"${dividend_rate:,.2f}" if dividend_rate is not None else "$0.00"
+                    st.metric("Dividendo Anual / Acción", div_rate_str, "Pago anual al inversor")
+                with col_k3:
+                    div_yield_str = f"{dividend_yield*100:.2f}%" if dividend_yield is not None else "0.00%"
+                    st.metric("Rendimiento por Dividendo", div_yield_str, "Yield porcentual anual")
+                with col_k4:
+                    # Estimación aproximada de dividendos pagados totales si hay datos de acciones y dividendos
+                    if dividend_rate is not None and shares_out is not None:
+                        total_divs = dividend_rate * shares_out
+                        tot_divs_str = f"${total_divs:,.0f}"
+                    else:
+                        tot_divs_str = "N/A"
+                    st.metric("Total Dividendos Pagados", tot_divs_str, "Estimación global anual")
+
                 # Criterios automáticos de orientación al inversor
                 mensajes_analisis = []
                 if w52_high and w52_low:
