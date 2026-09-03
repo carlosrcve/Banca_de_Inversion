@@ -37,11 +37,10 @@ def load_sp500_tickers():
         }
 
 # -------------------------------------------------------------------------
-# FUNCIÓN EN CACHÉ PARA OBTENER COTIZACIONES
+# FUNCIÓN PARA OBTENER COTIZACIONES (SIN CACHÉ PARA EVITAR RETARDO EN REFRESCO)
 # -------------------------------------------------------------------------
-@st.cache_data(ttl=120, show_spinner=False)
 def get_ticker_snapshot(symbol: str):
-    """Obtiene de forma segura el precio actual y variación del ticker con caché."""
+    """Obtiene de forma segura y directa el precio actual y variación del ticker."""
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.fast_info
@@ -51,111 +50,6 @@ def get_ticker_snapshot(symbol: str):
         return float(price), float(change_pct)
     except Exception:
         return 0.0, 0.0
-
-# -------------------------------------------------------------------------
-# FRAGMENTO EN TIEMPO REAL (SE EJECUTA CADA 10 SEGUNDOS)
-# -------------------------------------------------------------------------
-@st.fragment(run_every=10)
-def render_live_search_section(symbol, period):
-    st.caption(f"⚡ Actualización automática en vivo (Cada 10s) para: {symbol}")
-    
-    if symbol:
-        try:
-            asset = yf.Ticker(symbol)
-            df_hist = asset.history(period=period)
-
-            if not df_hist.empty:
-                curr_price, chg_pct = get_ticker_snapshot(symbol)
-                info = getattr(asset, "info", {})
-                long_name = info.get("longName", symbol)
-                currency = info.get("currency", "USD")
-                pe_ratio = info.get("trailingPE", None)
-                target_price = info.get("targetMeanPrice", None)
-                recommendation = info.get("recommendationKey", "N/A").upper()
-                roe = info.get("returnOnEquity", None)
-                market_cap = info.get("marketCap", None)
-                shares_out = info.get("sharesOutstanding", None)
-                eps = info.get("trailingEps", None)
-                dividend_rate = info.get("dividendRate", None)
-                dividend_yield = info.get("dividendYield", None)
-                profit_margin = info.get("profitMargins", None)
-                debt_to_equity = info.get("debtToEquity", None)
-                pb_ratio = info.get("priceToBook", None)
-                beta = info.get("beta", None)
-
-                # Ingresos trimestrales seguros
-                q_rev_str, q_net_str = "N/A", "N/A"
-                try:
-                    qf = asset.quarterly_financials
-                    if qf is not None and not qf.empty:
-                        rev_rows = [r for r in qf.index if "Revenue" in str(r)]
-                        net_rows = [r for r in qf.index if "Net Income" in str(r)]
-                        if rev_rows and pd.notnull(qf.loc[rev_rows[0]].iloc[0]):
-                            q_rev_str = f"${qf.loc[rev_rows[0]].iloc[0]:,.0f}"
-                        if net_rows and pd.notnull(qf.loc[net_rows[0]].iloc[0]):
-                            q_net_str = f"${qf.loc[net_rows[0]].iloc[0]:,.0f}"
-                except Exception:
-                    pass
-
-                st.markdown(f"### 💡 Diagnóstico Financiero: **{long_name} ({symbol})**")
-                
-                # Fila 1
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Precio Actual", f"${curr_price:,.2f} {currency}", f"{chg_pct:+.2f}%")
-                c2.metric("P/E Ratio", f"{pe_ratio:.1f}x" if pe_ratio else "N/A", "Valuación")
-                c3.metric("ROE", f"{roe*100:.1f}%" if roe else "N/A", "Eficiencia")
-                c4.metric("Opinión Wall Street", recommendation.replace("_", " "), "Consenso")
-
-                # Fila 2
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Cap. Bursátil", f"${market_cap:,.0f}" if market_cap else "N/A", "Valor de mercado")
-                c2.metric("Acciones Circulación", f"{shares_out:,.0f}" if shares_out else "N/A", "Títulos")
-                c3.metric("Ingresos Trimestrales", q_rev_str, "Reporte Q")
-                c4.metric("Ganancias Trimestrales", q_net_str, "Utilidad Neta Q")
-
-                # Fila 3
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("EPS", f"${eps:,.2f}" if eps is not None else "N/A", "Por Acción")
-                c2.metric("Dividendo Anual", f"${dividend_rate:,.2f}" if dividend_rate is not None else "$0.00", "Pago")
-                c3.metric("Dividend Yield", f"{dividend_yield*100:.2f}%" if dividend_yield is not None else "0.00%", "Yield")
-                tot_divs = (dividend_rate * shares_out) if (dividend_rate and shares_out) else None
-                c4.metric("Total Dividendos", f"${tot_divs:,.0f}" if tot_divs else "N/A", "Global")
-
-                # Fila 4
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Margen Neto", f"{profit_margin*100:.1f}%" if profit_margin is not None else "N/A", "Eficiencia")
-                c2.metric("Deuda / Capital", f"{debt_to_equity:.1f}%" if debt_to_equity is not None else "N/A", "Apalancamiento")
-                c3.metric("Precio / Libros", f"{pb_ratio:.2f}x" if pb_ratio is not None else "N/A", "Patrimonio")
-                c4.metric("Beta", f"{beta:.2f}" if beta is not None else "N/A", "Volatilidad")
-
-                st.markdown("---")
-
-                # Gráfico
-                df_hist = df_hist.reset_index()
-                fig = go.Figure(data=[go.Candlestick(
-                    x=df_hist["Date"], open=df_hist["Open"], high=df_hist["High"],
-                    low=df_hist["Low"], close=df_hist["Close"], name=symbol,
-                    increasing_line_color="#26a69a", decreasing_line_color="#ef5350"
-                )])
-                fig.update_layout(xaxis_rangeslider_visible=False, template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10), height=450)
-                st.plotly_chart(fig, use_container_width=True)
-
-                col_sub1, col_sub2 = st.columns([3, 1])
-                with col_sub1:
-                    st.subheader("📊 Resumen Histórico")
-                    st.dataframe(df_hist[["Date", "Open", "High", "Low", "Close", "Volume"]].tail(10), use_container_width=True)
-                with col_sub2:
-                    st.subheader("💾 Guardar")
-                    asset_type_input = st.selectbox("Tipo", ["Equity", "Commodity", "Index", "Crypto", "FX"], key="save_type")
-                    if st.button(f"Guardar {symbol}", key="save_search_asset", use_container_width=True):
-                        if PortfolioController.save_market_quote(symbol, long_name, asset_type_input, curr_price, chg_pct):
-                            st.success(f"✅ {symbol} guardado.")
-                        else:
-                            st.error("❌ Error al guardar.")
-            else:
-                st.warning(f"⚠️ No hay datos para '{symbol}'.")
-        except Exception as err:
-            st.error(f"❌ Error al procesar el activo: {err}")
 
 # -------------------------------------------------------------------------
 # FUNCIÓN RENDER PRINCIPAL
@@ -295,23 +189,120 @@ def render():
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # 2. BUSCADOR & ASESOR INTELIGENTE (ENVUELTO EN TIEMPO REAL)
+    # 2. BUSCADOR & ASESOR INTELIGENTE (BAJO DEMANDA CON BOTÓN DE REFRESCO)
     # -------------------------------------------------------------------------
     st.subheader("🔍 Buscador & Asesor Inteligente de Activos")
 
-    col_search1, col_search2 = st.columns([3, 1])
+    col_search1, col_search2, col_search3 = st.columns([2.5, 1, 1])
     with col_search1:
         symbol = st.text_input("Ticker o Símbolo (ej. AAPL, NVDA, GC=F, ^IXIC):", value="NVDA", key="input_search_symbol").strip().upper()
     with col_search2:
         period = st.selectbox("Rango de Tiempo", ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"], index=3, key="select_search_period")
+    with col_search3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        refresh_btn = st.button("🔄 Consultar / Actualizar", use_container_width=True)
 
-    # Llamada al fragmento interactivo en vivo
-    render_live_search_section(symbol, period)
+    if symbol:
+        try:
+            asset = yf.Ticker(symbol)
+            df_hist = asset.history(period=period)
+
+            if not df_hist.empty:
+                curr_price, chg_pct = get_ticker_snapshot(symbol)
+                info = getattr(asset, "info", {})
+                long_name = info.get("longName", symbol)
+                currency = info.get("currency", "USD")
+                pe_ratio = info.get("trailingPE", None)
+                recommendation = info.get("recommendationKey", "N/A").upper()
+                roe = info.get("returnOnEquity", None)
+                market_cap = info.get("marketCap", None)
+                shares_out = info.get("sharesOutstanding", None)
+                eps = info.get("trailingEps", None)
+                dividend_rate = info.get("dividendRate", None)
+                dividend_yield = info.get("dividendYield", None)
+                profit_margin = info.get("profitMargins", None)
+                debt_to_equity = info.get("debtToEquity", None)
+                pb_ratio = info.get("priceToBook", None)
+                beta = info.get("beta", None)
+
+                # Ingresos trimestrales seguros
+                q_rev_str, q_net_str = "N/A", "N/A"
+                try:
+                    qf = asset.quarterly_financials
+                    if qf is not None and not qf.empty:
+                        rev_rows = [r for r in qf.index if "Revenue" in str(r)]
+                        net_rows = [r for r in qf.index if "Net Income" in str(r)]
+                        if rev_rows and pd.notnull(qf.loc[rev_rows[0]].iloc[0]):
+                            q_rev_str = f"${qf.loc[rev_rows[0]].iloc[0]:,.0f}"
+                        if net_rows and pd.notnull(qf.loc[net_rows[0]].iloc[0]):
+                            q_net_str = f"${qf.loc[net_rows[0]].iloc[0]:,.0f}"
+                except Exception:
+                    pass
+
+                st.markdown(f"### 💡 Diagnóstico Financiero: **{long_name} ({symbol})**")
+                
+                # Fila 1
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Precio Actual", f"${curr_price:,.2f} {currency}", f"{chg_pct:+.2f}%")
+                c2.metric("P/E Ratio", f"{pe_ratio:.1f}x" if pe_ratio else "N/A", "Valuación")
+                c3.metric("ROE", f"{roe*100:.1f}%" if roe else "N/A", "Eficiencia")
+                c4.metric("Opinión Wall Street", recommendation.replace("_", " "), "Consenso")
+
+                # Fila 2
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Cap. Bursátil", f"${market_cap:,.0f}" if market_cap else "N/A", "Valor de mercado")
+                c2.metric("Acciones Circulación", f"{shares_out:,.0f}" if shares_out else "N/A", "Títulos")
+                c3.metric("Ingresos Trimestrales", q_rev_str, "Reporte Q")
+                c4.metric("Ganancias Trimestrales", q_net_str, "Utilidad Neta Q")
+
+                # Fila 3
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("EPS", f"${eps:,.2f}" if eps is not None else "N/A", "Por Acción")
+                c2.metric("Dividendo Anual", f"${dividend_rate:,.2f}" if dividend_rate is not None else "$0.00", "Pago")
+                c3.metric("Dividend Yield", f"{dividend_yield*100:.2f}%" if dividend_yield is not None else "0.00%", "Yield")
+                tot_divs = (dividend_rate * shares_out) if (dividend_rate and shares_out) else None
+                c4.metric("Total Dividendos", f"${tot_divs:,.0f}" if tot_divs else "N/A", "Global")
+
+                # Fila 4
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Margen Neto", f"{profit_margin*100:.1f}%" if profit_margin is not None else "N/A", "Eficiencia")
+                c2.metric("Deuda / Capital", f"{debt_to_equity:.1f}%" if debt_to_equity is not None else "N/A", "Apalancamiento")
+                c3.metric("Precio / Libros", f"{pb_ratio:.2f}x" if pb_ratio is not None else "N/A", "Patrimonio")
+                c4.metric("Beta", f"{beta:.2f}" if beta is not None else "N/A", "Volatilidad")
+
+                st.markdown("---")
+
+                # Gráfico interactivo limpio y responsivo
+                df_hist = df_hist.reset_index()
+                fig = go.Figure(data=[go.Candlestick(
+                    x=df_hist["Date"], open=df_hist["Open"], high=df_hist["High"],
+                    low=df_hist["Low"], close=df_hist["Close"], name=symbol,
+                    increasing_line_color="#26a69a", decreasing_line_color="#ef5350"
+                )])
+                fig.update_layout(xaxis_rangeslider_visible=False, template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10), height=450)
+                st.plotly_chart(fig, use_container_width=True)
+
+                col_sub1, col_sub2 = st.columns([3, 1])
+                with col_sub1:
+                    st.subheader("📊 Resumen Histórico")
+                    st.dataframe(df_hist[["Date", "Open", "High", "Low", "Close", "Volume"]].tail(10), use_container_width=True)
+                with col_sub2:
+                    st.subheader("💾 Guardar")
+                    asset_type_input = st.selectbox("Tipo", ["Equity", "Commodity", "Index", "Crypto", "FX"], key="save_type")
+                    if st.button(f"Guardar {symbol}", key="save_search_asset", use_container_width=True):
+                        if PortfolioController.save_market_quote(symbol, long_name, asset_type_input, curr_price, chg_pct):
+                            st.success(f"✅ {symbol} guardado.")
+                        else:
+                            st.error("❌ Error al guardar.")
+            else:
+                st.warning(f"⚠️ No hay datos para '{symbol}'.")
+        except Exception as err:
+            st.error(f"❌ Error al procesar el activo: {err}")
 
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # 3. HISTORIAL DE COTIZACIONES EN TiDB (Carga Automática)
+    # 3. HISTORIAL DE COTIZACIONES EN TiDB
     # -------------------------------------------------------------------------
     st.subheader("📋 Historial de Cotizaciones Registradas en TiDB")
     quotes = PortfolioController.get_market_quotes()
