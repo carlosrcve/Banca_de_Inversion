@@ -160,24 +160,38 @@ def render_stocks_column():
 # -------------------------------------------------------------------------
 def render():
     st.title("📈 Análisis de Mercados & Clases de Activos Globales")
-    # Ajuste CSS opcional para alinear elementos visuales dentro de las columnas si es necesario
+    
+    # CSS personalizado para:
+    # 1. Crear un contenedor con scroll horizontal (barra para girar hacia la derecha).
+    # 2. Asegurar que cada columna tenga un ancho mínimo fijo para que no se compriman.
     st.markdown("""
         <style>
-        div[data-testid="column"] {
+        .scrollable-container {
             display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
+            flex-direction: row;
+            overflow-x: auto;
+            gap: 15px;
+            padding-bottom: 15px;
+            width: 100%;
+        }
+        /* Forzamos un ancho mínimo a cada columna interna para activar el scroll fluido */
+        .scrollable-container > div {
+            min-width: 250px;
+            flex: 1;
         }
         </style>
     """, unsafe_allow_html=True)
 
-    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    # Contenedor envolvente con barra horizontal
+    st.markdown('<div class="scrollable-container">', unsafe_allow_html=True)
+
+    col_m1, col_m2, col_m3, col_m4, col_m5 = st.columns(5)
 
     # -------------------------------------------------------------------------
     # 1. CATEGORÍA COMMODITIES / METALES
     # -------------------------------------------------------------------------
     with col_m1:
-        st.markdown("### 🪙 Commodities") # Título más corto y uniforme
+        st.markdown("### 🪙 Commodities")
         dict_metales = {
             "Oro (Gold Spot)": "GC=F",
             "Plata (Silver)": "SI=F",
@@ -193,12 +207,12 @@ def render():
         m_price, m_chg = get_ticker_snapshot(metal_ticker)
         st.metric(selected_metal_name, f"${m_price:,.2f}", f"{m_chg:+.2f}%")
 
-        if st.button(f"💾 Guardar", key="save_metal_btn", use_container_width=True):
+        if st.button("💾 Guardar", key="save_metal_btn", use_container_width=True):
             success, err_msg = PortfolioController.save_market_quote(
                 metal_ticker, selected_metal_name, "Commodity", m_price, m_chg
             )
             if success:
-                st.success(f"✅ Guardado.")
+                st.success("✅ Guardado.")
             else:
                 st.error(f"❌ Error: {err_msg}")
 
@@ -206,7 +220,7 @@ def render():
     # 2. CATEGORÍA ÍNDICES GLOBALES / MERCADOS
     # -------------------------------------------------------------------------
     with col_m2:
-        st.markdown("### 📊 Índices") # Título más corto y uniforme
+        st.markdown("### 📊 Índices")
         dict_indices = {
             "Nasdaq Composite": "^IXIC",
             "S&P 500": "^GSPC",
@@ -222,20 +236,19 @@ def render():
         i_price, i_chg = get_ticker_snapshot(index_ticker)
         st.metric(selected_index_name, f"{i_price:,.2f} pts", f"{i_chg:+.2f}%")
 
-        if st.button(f"💾 Guardar", key="save_index_btn", use_container_width=True):
+        if st.button("💾 Guardar", key="save_index_btn", use_container_width=True):
             if PortfolioController.save_market_quote(
                 index_ticker, selected_index_name, "Index", i_price, i_chg
             ):
-                st.success(f"✅ Guardado.")
+                st.success("✅ Guardado.")
             else:
                 st.error("❌ Error al guardar.")
 
     # -------------------------------------------------------------------------
-    # 3. CATEGORÍA ACCIONES DE WALL STREET (DINÁMICO CON S&P 500)
+    # 3. CATEGORÍA ACCIONES DE WALL STREET
     # -------------------------------------------------------------------------
     with col_m3:
-        st.markdown("### 🏢 Acciones") # Título más corto y uniforme
-        
+        st.markdown("### 🏢 Acciones")
         dict_acciones = load_sp500_tickers()
         
         selected_stock_label = st.selectbox(
@@ -248,11 +261,11 @@ def render():
         s_price, s_chg = get_ticker_snapshot(stock_ticker)
         st.metric(selected_stock_label.split(" - ")[0], f"${s_price:,.2f}", f"{s_chg:+.2f}%")
 
-        if st.button(f"💾 Guardar", key="save_stock_btn", use_container_width=True):
+        if st.button("💾 Guardar", key="save_stock_btn", use_container_width=True):
             if PortfolioController.save_market_quote(
                 stock_ticker, selected_stock_label, "Equity", s_price, s_chg
             ):
-                st.success(f"✅ Guardado.")
+                st.success("✅ Guardado.")
             else:
                 st.error("❌ Error al guardar.")
 
@@ -260,7 +273,7 @@ def render():
     # 4. CATEGORÍA DIVISAS Y TIPO DE CAMBIO (BCV VENEZUELA)
     # -------------------------------------------------------------------------
     with col_m4:
-        st.markdown("### 🇻🇪 Divisas BCV") # Título más corto y uniforme
+        st.markdown("### 🇻🇪 Divisas BCV")
         dict_divisas = {
             "Dólar Oficial (BCV)": "USDVES=X",
             "Euro Oficial (BCV)": "EURVES=X",
@@ -274,14 +287,47 @@ def render():
         price_str = f"Bs. {d_price:,.2f}" if d_price and d_price > 0 else "Bs. S/D"
         st.metric(selected_divisa_name, price_str, f"{d_chg:+.2f}%")
 
-        if st.button(f"💾 Guardar", key="save_divisa_btn", use_container_width=True):
+        if st.button("💾 Guardar", key="save_divisa_btn", use_container_width=True):
             success, err_msg = PortfolioController.save_market_quote(
                 divisa_ticker, selected_divisa_name, "Currency", d_price, d_chg
             )
             if success:
-                st.success(f"✅ Guardado.")
+                st.success("✅ Guardado.")
             else:
                 st.error(f"❌ Error: {err_msg}")
+
+    # -------------------------------------------------------------------------
+    # 5. CATEGORÍA MERCADO DE DIVISAS INTERNACIONAL (FOREX MAJORS)
+    # -------------------------------------------------------------------------
+    with col_m5:
+        st.markdown("### 💱 Forex Majors")
+        dict_forex = {
+            "Euro / Dólar (EUR/USD)": "EURUSD=X",
+            "Libra / Dólar (GBP/USD)": "GBPUSD=X",
+            "Dólar / Yen (USD/JPY)": "USDJPY=X",
+            "Dólar / Dólar Canadiense (USD/CAD)": "USDCAD=X",
+            "Dólar / Corona Sueca (USD/SEK)": "USDSEK=X",
+        }
+        selected_forex_name = st.selectbox(
+            "Seleccione:", list(dict_forex.keys()), key="sel_forex"
+        )
+        forex_ticker = dict_forex[selected_forex_name]
+
+        f_price, f_chg = get_ticker_snapshot(forex_ticker)
+        price_forex_str = f"{f_price:,.4f}" if f_price and f_price > 0 else "S/D"
+        st.metric(selected_forex_name, price_forex_str, f"{f_chg:+.2f}%")
+
+        if st.button("💾 Guardar", key="save_forex_btn", use_container_width=True):
+            success, err_msg = PortfolioController.save_market_quote(
+                forex_ticker, selected_forex_name, "Forex", f_price, f_chg
+            )
+            if success:
+                st.success("✅ Guardado.")
+            else:
+                st.error(f"❌ Error: {err_msg}")
+
+    # Cierre del contenedor con scroll horizontal
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
 
