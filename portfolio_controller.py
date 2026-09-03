@@ -231,53 +231,43 @@ class PortfolioController:
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
     ) -> bool:
-        """Crea un nuevo portafolio y sus activos usando PyMySQL puro con control de transacciones seguro."""
-        conn = get_secure_db_connection()
-        if not conn:
-            print("🔥 No se pudo establecer conexión con TiDB Cloud.")
-            return False
-
+        """Crea un nuevo portafolio e inserta sus activos usando SQLAlchemy con engine.begin()."""
         try:
-            with conn.cursor() as cursor:
-                # 1. Insertar el portafolio principal y capturar su ID de forma segura
-                query_portfolio = """
+            engine = get_sqlalchemy_engine()
+            with engine.begin() as conn:
+                # 1. Insertar el portafolio principal y obtener el ID con .lastrowid
+                query_portfolio = text("""
                     INSERT INTO portfolios (name, description)
-                    VALUES (%s, %s)
-                """
-                cursor.execute(query_portfolio, (portfolio_name, description))
-                portfolio_id = cursor.lastrowid
+                    VALUES (:name, :description)
+                """)
+                result = conn.execute(query_portfolio, {
+                    "name": portfolio_name,
+                    "description": description
+                })
+                portfolio_id = result.lastrowid
 
-                if not portfolio_id:
-                    raise Exception("No se pudo obtener el ID autogenerado del portafolio.")
-
-                # 2. Insertar todos los activos asociados en bucle
-                query_asset = """
+                # 2. Insertar todos los activos asociados en bucle usando el ID obtenido
+                query_asset = text("""
                     INSERT INTO portfolio_assets 
                     (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """
+                    VALUES (:portfolio_id, :ticker, :asset_name, :asset_class, :quantity, :purchase_price, :acquisition_date)
+                """)
                 
                 for item in assets:
-                    cursor.execute(query_asset, (
-                        portfolio_id,
-                        item["symbol"],
-                        item["asset_name"],
-                        item["asset_type"],
-                        item["quantity"],
-                        item["purchase_price"],
-                        item["purchase_date"]
-                    ))
-
-            # Si todo sale bien, confirmamos la transacción en la base de datos
-            conn.commit()
+                    conn.execute(query_asset, {
+                        "portfolio_id": portfolio_id,
+                        "ticker": item["symbol"],
+                        "asset_name": item["asset_name"],
+                        "asset_class": item["asset_type"],
+                        "quantity": item["quantity"],
+                        "purchase_price": item["purchase_price"],
+                        "acquisition_date": item["purchase_date"]
+                    })
+                    
             return True
         except Exception as e:
-            # Si hay cualquier fallo, revertimos los cambios para dejar la BD limpia
-            conn.rollback()
-            print(f"🔥 Error detallado al crear el portafolio: {e}")
+            print(f"❌ Error al crear el portafolio: {e}")
             return False
-        finally:
-            conn.close()
 
     @staticmethod
     def get_portfolios():
