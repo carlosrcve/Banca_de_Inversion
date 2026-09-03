@@ -231,13 +231,14 @@ class PortfolioController:
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
     ) -> tuple[bool, str | None]:
-        """Crea un portafolio y retorna si fue exitoso o el error exacto."""
+        """Crea un portafolio y sus activos usando exactamente los nombres reales de la BD."""
         import traceback
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
+                # 1. Insertar el portafolio (la columna real es 'name')
                 query_portfolio = text("""
-                    INSERT INTO portfolios (portfolio_name, description)
+                    INSERT INTO portfolios (name, description)
                     VALUES (:name, :description)
                 """)
                 result = conn.execute(query_portfolio, {
@@ -246,18 +247,19 @@ class PortfolioController:
                 })
                 portfolio_id = result.lastrowid
 
+                # 2. Insertar los activos usando los nombres exactos del CREATE TABLE
                 query_asset = text("""
                     INSERT INTO portfolio_assets 
-                    (portfolio_id, symbol, asset_name, asset_type, quantity, purchase_price, acquisition_date)
-                    VALUES (:portfolio_id, :symbol, :asset_name, :asset_type, :quantity, :purchase_price, :acquisition_date)
+                    (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
+                    VALUES (:portfolio_id, :ticker, :asset_name, :asset_class, :quantity, :purchase_price, :acquisition_date)
                 """)
                 
                 for item in assets:
                     conn.execute(query_asset, {
                         "portfolio_id": portfolio_id,
-                        "symbol": item.get("symbol") or item.get("ticker"),
+                        "ticker": item.get("symbol") or item.get("ticker"),
                         "asset_name": item.get("asset_name"),
-                        "asset_type": item.get("asset_type") or item.get("asset_class"),
+                        "asset_class": item.get("asset_type") or item.get("asset_class"),
                         "quantity": item.get("quantity"),
                         "purchase_price": item.get("purchase_price"),
                         "acquisition_date": item.get("purchase_date") or item.get("acquisition_date")
