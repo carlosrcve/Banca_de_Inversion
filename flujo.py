@@ -92,7 +92,7 @@ git push origin main
 
 cd "C:\Users\Carlos Rodriguez\Desktop\Banca_de_Inversion"
 git add dcf_controller.py
-git add modules/mod_markets.py
 git add portfolio_controller.py
+git add modules/mod_markets.py
 git commit -m "Fix: Unified database credentials handling and SQLAlchemy engine for TiDB Cloud"
 git push origin main

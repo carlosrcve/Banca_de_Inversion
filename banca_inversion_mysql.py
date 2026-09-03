@@ -236,3 +236,34 @@ CREATE TABLE IF NOT EXISTS market_quotes (
     change_percent DECIMAL(8, 4) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+
+
+
+-- 1. Tabla principal de Portafolios
+USE valuations_db;
+CREATE TABLE IF NOT EXISTS portfolios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(150) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2. Tabla de Activos pertenecientes a cada Portafolio
+USE valuations_db;
+CREATE TABLE IF NOT EXISTS portfolio_assets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    portfolio_id INT NOT NULL,
+    ticker VARCHAR(20) NOT NULL,
+    asset_name VARCHAR(150) NOT NULL,
+    asset_class VARCHAR(50) NOT NULL, -- Ej: Equity, Crypto, Commodity
+    quantity DECIMAL(18, 6) NOT NULL,
+    purchase_price DECIMAL(18, 4) NOT NULL,
+    acquisition_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_portfolio 
+        FOREIGN KEY (portfolio_id) 
+        REFERENCES portfolios(id) 
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
