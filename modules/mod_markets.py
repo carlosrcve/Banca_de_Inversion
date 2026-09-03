@@ -296,6 +296,9 @@ def render():
                 # Métricas corporativas y financieras solicitadas
                 market_cap = info.get("marketCap", None)
                 shares_out = info.get("sharesOutstanding", None)
+                eps = info.get("trailingEps", None)
+                dividend_rate = info.get("dividendRate", None)
+                dividend_yield = info.get("dividendYield", None)
 
                 # Obtener ingresos y ganancias del último trimestre reportado
                 q_rev_str, q_net_str = "N/A", "N/A"
@@ -333,7 +336,7 @@ def render():
                     st.metric("Opinión Wall Street", rec_display, "Consenso de analistas")
 
                 # Fila 2 de Métricas: Tamaño, Acciones y Resultados Trimestrales
-                st.write("DEBUG: Cargando fila 2 de métricas...") # <--- Línea temporal de prueba
+                st.write("DEBUG: Cargando fila 2 de métricas (Tamaño y Resultados)...")
                 col_j1, col_j2, col_j3, col_j4 = st.columns(4)
                 with col_j1:
                     mcap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
