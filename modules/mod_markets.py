@@ -3,7 +3,6 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 from portfolio_controller import PortfolioController
-import plotly.graph_objects as go
 
 # -------------------------------------------------------------------------
 # FUNCIÓN EN CACHÉ PARA CARGAR LAS ACCIONES DEL S&P 500 DINÁMICAMENTE
@@ -166,8 +165,6 @@ def render():
     con opción de registrar el *snapshot* actual en la base de datos **TiDB Cloud**.
     """)
 
-
-
     col_m1, col_m2, col_m3 = st.columns(3)
 
     # -------------------------------------------------------------------------
@@ -233,7 +230,6 @@ def render():
     with col_m3:
         st.subheader("🏢 Acciones Wall Street")
         
-        # Cargar diccionario de acciones
         dict_acciones = load_sp500_tickers()
         
         selected_stock_label = st.selectbox(
@@ -257,9 +253,9 @@ def render():
     st.markdown("---")
 
     # -------------------------------------------------------------------------
-    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS (VELAS JAPONESAS)
+    # 2. BUSCADOR E HISTÓRICO DE ACTIVOS (CON INTELIGENCIA FINANCIERA)
     # -------------------------------------------------------------------------
-    st.subheader("🔍 Buscador e Histórico de Activos Financieros")
+    st.subheader("🔍 Buscador & Asesor Inteligente de Activos")
 
     col_search1, col_search2 = st.columns([3, 1])
     with col_search1:
@@ -284,6 +280,60 @@ def render():
             if not df_hist.empty:
                 curr_price, chg_pct = get_ticker_snapshot(symbol)
 
+                # =============================================================
+                # EXTRACCIÓN DE METADATOS PARA EL ANÁLISIS FINANCIERO DINÁMICO
+                # =============================================================
+                info = getattr(asset, "info", {})
+                long_name = info.get("longName", symbol)
+                currency = info.get("currency", "USD")
+                pe_ratio = info.get("trailingPE", None)
+                target_price = info.get("targetMeanPrice", None)
+                recommendation = info.get("recommendationKey", "N/A").upper()
+                roe = info.get("returnOnEquity", None)
+                w52_high = info.get("fiftyTwoWeekHigh", None)
+                w52_low = info.get("fiftyTwoWeekLow", None)
+
+                # Panel Ejecutivo Inteligente (Responde si está caro/barato y da ganancias)
+                st.markdown(f"### 💡 Diagnóstico Financiero: **{long_name} ({symbol})**")
+                
+                col_i1, col_i2, col_i3, col_i4 = st.columns(4)
+                with col_i1:
+                    st.metric("Precio Actual", f"${curr_price:,.2f} {currency}", f"{chg_pct:+.2f}%")
+                with col_i2:
+                    pe_str = f"{pe_ratio:.1f}x" if pe_ratio else "N/A"
+                    st.metric("P/E Ratio (Valuación)", pe_str, "Caro > 35 / Barato < 15")
+                with col_i3:
+                    roe_str = f"{roe*100:.1f}%" if roe else "N/A"
+                    st.metric("ROE (¿Da Ganancias?)", roe_str, "Eficiencia del capital")
+                with col_i4:
+                    rec_display = recommendation.replace("_", " ") if recommendation else "NEUTRAL"
+                    st.metric("Opinión Wall Street", rec_display, "Consenso de analistas")
+
+                # Criterios automáticos de orientación al inversor
+                mensajes_analisis = []
+                if w52_high and w52_low:
+                    if curr_price >= (w52_high * 0.90):
+                        mensajes_analisis.append(f"⚠️ **Precio cercano a máximos anuales (${w52_high:,.2f}):** El activo muestra gran fortaleza, pero evalúe si está pagando una prima elevada.")
+                    elif curr_price <= (w52_low * 1.10):
+                        mensajes_analisis.append(f"💰 **Precio cercano a mínimos anuales (${w52_low:,.2f}):** Podría ser una oportunidad de valor si los fundamentales de la empresa se mantienen sólidos.")
+                
+                if pe_ratio:
+                    if pe_ratio > 35:
+                        mensajes_analisis.append(f"📈 **Valuación exigida:** Con un P/E de {pe_ratio:.1f}, el mercado está descontando un crecimiento muy agresivo de beneficios a futuro.")
+                    elif pe_ratio < 15:
+                        mensajes_analisis.append(f"📉 **Valuación atractiva:** Un P/E de {pe_ratio:.1f} muestra que cotiza a un múltiplo moderado frente a sus ganancias.")
+
+                if target_price and target_price > 0:
+                    potencial = ((target_price - curr_price) / curr_price) * 100
+                    mensajes_analisis.append(f"🎯 **Precio Objetivo del Consenso:** Los analistas proyectan un valor medio de **${target_price:,.2f}** (un potencial estimado de **{potencial:+.1f}%**).")
+
+                if not mensajes_analisis:
+                    mensajes_analisis.append("ℹ️ Activo cotizando bajo condiciones estables de mercado. Monitoree las tendencias del sector.")
+
+                for msg in mensajes_analisis:
+                    st.info(msg)
+
+                st.markdown("---")
                 st.write(f"### Evolución del Precio (Velas Japonesas): **{symbol}**")
 
                 # Asegurar compatibilidad de fechas en el eje X
@@ -338,12 +388,12 @@ def render():
                     if st.button(f"💾 Guardar {symbol} en TiDB", key="save_search_asset"):
                         if PortfolioController.save_market_quote(
                             symbol,
-                            symbol,
+                            long_name,
                             asset_type_input,
                             curr_price,
                             chg_pct,
                         ):
-                            st.success(f"✅ {symbol} guardado en TiDB Cloud.")
+                            st.success(f"✅ {symbol} ({long_name}) guardado en TiDB Cloud.")
                         else:
                             st.error("❌ Error al guardar en TiDB.")
             else:
