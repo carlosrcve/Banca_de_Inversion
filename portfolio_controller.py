@@ -231,11 +231,12 @@ class PortfolioController:
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
     ) -> bool:
-        """Crea un nuevo portafolio e inserta sus activos usando SQLAlchemy con engine.begin()."""
+        """Crea un nuevo portafolio e inserta sus activos con impresión de error detallado."""
+        import traceback
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
-                # 1. Insertar el portafolio principal y obtener el ID con .lastrowid
+                # 1. Insertar el portafolio principal
                 query_portfolio = text("""
                     INSERT INTO portfolios (name, description)
                     VALUES (:name, :description)
@@ -246,7 +247,7 @@ class PortfolioController:
                 })
                 portfolio_id = result.lastrowid
 
-                # 2. Insertar todos los activos asociados en bucle usando el ID obtenido
+                # 2. Insertar los activos
                 query_asset = text("""
                     INSERT INTO portfolio_assets 
                     (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
@@ -266,7 +267,9 @@ class PortfolioController:
                     
             return True
         except Exception as e:
-            print(f"❌ Error al crear el portafolio: {e}")
+            print("================ EXCEPCIÓN DETALLADA ================")
+            traceback.print_exc()
+            print("=====================================================")
             return False
 
     @staticmethod
