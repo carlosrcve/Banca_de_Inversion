@@ -231,14 +231,14 @@ class PortfolioController:
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
     ) -> bool:
-        """Crea un nuevo portafolio e inserta sus activos de forma segura."""
+        """Crea un nuevo portafolio e inserta sus activos usando el nombre de columna correcto."""
         import traceback
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
-                # 1. Insertar el portafolio principal y obtener el ID
+                # 1. Cambiamos 'name' por 'portfolio_name' (o el nombre real de tu columna en la BD)
                 query_portfolio = text("""
-                    INSERT INTO portfolios (name, description)
+                    INSERT INTO portfolios (portfolio_name, description)
                     VALUES (:name, :description)
                 """)
                 result = conn.execute(query_portfolio, {
@@ -259,7 +259,7 @@ class PortfolioController:
                         "portfolio_id": portfolio_id,
                         "ticker": item.get("symbol") or item.get("ticker"),
                         "asset_name": item.get("asset_name"),
-                        "asset_class": item.get("asset_type") or item.get("asset_class"), # <--- Soporta ambos nombres
+                        "asset_class": item.get("asset_type") or item.get("asset_class"),
                         "quantity": item.get("quantity"),
                         "purchase_price": item.get("purchase_price"),
                         "acquisition_date": item.get("purchase_date") or item.get("acquisition_date")
