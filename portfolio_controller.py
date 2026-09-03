@@ -47,6 +47,24 @@ class PortfolioController:
             return False, error_msg
 
     @staticmethod
+    def get_market_quotes():
+        """Obtiene todas las cotizaciones guardadas en la tabla market_quotes."""
+        try:
+            engine = get_sqlalchemy_engine()
+            with engine.connect() as conn:
+                query = text("""
+                    SELECT symbol, asset_name, asset_type, price, change_percent, updated_at 
+                    FROM market_quotes 
+                    ORDER BY updated_at DESC
+                """)
+                result = conn.execute(query)
+                rows = [dict(row._mapping) for row in result]
+                return rows
+        except Exception as e:
+            print(f"❌ Error al consultar cotizaciones: {e}")
+            return []
+
+    @staticmethod
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
     ) -> bool:
