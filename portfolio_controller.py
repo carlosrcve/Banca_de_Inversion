@@ -234,6 +234,7 @@ class PortfolioController:
         """Crea un nuevo portafolio e inserta sus activos usando tus columnas reales ('name', 'ticker', etc.)."""
         conn = get_secure_db_connection()
         if not conn:
+            st.error("❌ No se pudo establecer conexión segura con la base de datos.")
             return False
 
         try:
@@ -256,12 +257,12 @@ class PortfolioController:
                     query_asset,
                     (
                         portfolio_id,
-                        item["symbol"],         # El ticker que viene del form de Streamlit
+                        item["symbol"],         
                         item["asset_name"],
-                        item["asset_type"],     # Mapeado a asset_class en la BD
+                        item["asset_type"],     
                         item["quantity"],
                         item["purchase_price"],
-                        item["purchase_date"],  # Mapeado a acquisition_date en la BD
+                        item["purchase_date"],  
                     ),
                 )
 
@@ -270,6 +271,8 @@ class PortfolioController:
             conn.close()
             return True
         except Exception as e:
+            # ESTO MOSTRARÁ EL ERROR REAL EN LA PANTALLA DE STREAMLIT PARA VER QUÉ FALLA
+            st.error(f"❌ Error técnico detallado: {e}")
             print(f"Error al crear el portafolio en TiDB: {e}")
             if conn:
                 try:
