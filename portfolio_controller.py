@@ -230,13 +230,12 @@ class PortfolioController:
     @staticmethod
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
-    ) -> bool:
-        """Crea un nuevo portafolio e inserta sus activos usando el nombre de columna correcto."""
+    ) -> tuple[bool, str | None]:
+        """Crea un portafolio y retorna si fue exitoso o el error exacto."""
         import traceback
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
-                # 1. Cambiamos 'name' por 'portfolio_name' (o el nombre real de tu columna en la BD)
                 query_portfolio = text("""
                     INSERT INTO portfolios (portfolio_name, description)
                     VALUES (:name, :description)
@@ -247,7 +246,6 @@ class PortfolioController:
                 })
                 portfolio_id = result.lastrowid
 
-                # 2. Insertar los activos asociados
                 query_asset = text("""
                     INSERT INTO portfolio_assets 
                     (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
@@ -265,11 +263,10 @@ class PortfolioController:
                         "acquisition_date": item.get("purchase_date") or item.get("acquisition_date")
                     })
                     
-            return True
+            return True, None
         except Exception as e:
-            print("🔥 ERROR CRÍTICO AL GUARDAR PORTAFOLIO:")
             traceback.print_exc()
-            return False
+            return False, str(e)
 
     @staticmethod
     def get_portfolios():

@@ -68,7 +68,7 @@ def render():
                 if not p_name.strip():
                     st.warning("⚠️ Por favor, ingresa un nombre para el portafolio.")
                 else:
-                    success = PortfolioController.create_portfolio(
+                    success, error_msg = PortfolioController.create_portfolio(
                         p_name, p_desc, st.session_state.temp_assets
                     )
                     if success:
@@ -76,7 +76,7 @@ def render():
                         st.session_state.temp_assets = []
                         st.rerun()
                     else:
-                        st.error("❌ Ocurrió un error al guardar el portafolio. Revisa la consola para más detalles.")
+                        st.error(f"❌ Error exacto de MySQL/SQLAlchemy: {error_msg}")
 
     with tab2:
         st.subheader("Consultar Portafolios Almacenados")
