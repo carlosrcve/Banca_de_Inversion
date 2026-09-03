@@ -482,15 +482,24 @@ def render():
                 # 2. FRAME ESPECIALIZADO: METALES Y COMMODITIES (METALS)
                 # =========================================================================
                 elif asset_category == "Commodity":
-                    volume = info.get("volume", 0)
-                    high_period = df_hist['High'].max() if not df_hist.empty else 0
-                    low_period = df_hist['Low'].min() if not df_hist.empty else 0
+                    volume = info.get("volume", 0) if info.get("volume") is not None else 0
+                    
+                    # Validación de seguridad para evitar errores con NoneType
+                    safe_curr_price = curr_price if curr_price is not None else 0.0
+                    safe_chg_pct = chg_pct if chg_pct is not None else 0.0
+                    
+                    high_period = df_hist['High'].max() if not df_hist.empty and pd.notnull(df_hist['High'].max()) else safe_curr_price
+                    low_period = df_hist['Low'].min() if not df_hist.empty and pd.notnull(df_hist['Low'].min()) else safe_curr_price
 
                     c1, c2, c3, c4 = st.columns(4)
-                    with c1: st.metric("Cotización Spot", f"${curr_price:,.2f} USD", f"{chg_pct:+.2f}%")
-                    with c2: st.metric("Máximo del Periodo", f"${high_period:,.2f}", "Techo técnico temporal")
-                    with c3: st.metric("Mínimo del Periodo", f"${low_period:,.2f}", "Piso temporal")
-                    with c4: st.metric("Volumen Negociado", f"{volume:,.0f}" if volume else "N/A", "Liquidez de mercado")
+                    with c1: 
+                        st.metric("Cotización Spot", f"${safe_curr_price:,.2f} USD", f"{safe_chg_pct:+.2f}%")
+                    with c2: 
+                        st.metric("Máximo del Periodo", f"${high_period:,.2f}", "Techo técnico temporal")
+                    with c3: 
+                        st.metric("Mínimo del Periodo", f"${low_period:,.2f}", "Piso temporal")
+                    with c4: 
+                        st.metric("Volumen Negociado", f"{volume:,.0f}" if volume else "N/A", "Liquidez de mercado")
 
                     st.markdown("---")
                     html_interpretation = (
@@ -499,7 +508,6 @@ def render():
                         '<p style="margin: 0; line-height: 1.6;">Activos tangibles de cobertura contra la inflación y refugio geopolítico. Su comportamiento está dictado por los flujos de contratos de futuros, la oferta física y las expectativas monetarias globales.</p>'
                         '</div>'
                     )
-
                 # =========================================================================
                 # 3. FRAME ESPECIALIZADO: ÍNDICES BURSÁTILES (INDEX)
                 # =========================================================================
