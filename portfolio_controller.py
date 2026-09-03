@@ -231,11 +231,12 @@ class PortfolioController:
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
     ) -> bool:
-        """Crea un nuevo portafolio e imprime el error exacto si ocurre."""
+        """Crea un nuevo portafolio e inserta sus activos de forma segura."""
         import traceback
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
+                # 1. Insertar el portafolio principal y obtener el ID
                 query_portfolio = text("""
                     INSERT INTO portfolios (name, description)
                     VALUES (:name, :description)
@@ -246,6 +247,7 @@ class PortfolioController:
                 })
                 portfolio_id = result.lastrowid
 
+                # 2. Insertar los activos asociados
                 query_asset = text("""
                     INSERT INTO portfolio_assets 
                     (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
@@ -253,12 +255,11 @@ class PortfolioController:
                 """)
                 
                 for item in assets:
-                    print("DEBUG - Intentando insertar activo:", item) # <--- Esto mostrará qué datos está leyendo
                     conn.execute(query_asset, {
                         "portfolio_id": portfolio_id,
                         "ticker": item.get("symbol") or item.get("ticker"),
                         "asset_name": item.get("asset_name"),
-                        "asset_class": item.get("asset_type") or item.get("asset_class"),
+                        "asset_class": item.get("asset_type") or item.get("asset_class"), # <--- Soporta ambos nombres
                         "quantity": item.get("quantity"),
                         "purchase_price": item.get("purchase_price"),
                         "acquisition_date": item.get("purchase_date") or item.get("acquisition_date")
@@ -266,7 +267,7 @@ class PortfolioController:
                     
             return True
         except Exception as e:
-            print("🔥 ERROR CRÍTICO EN SQLALCHEMY:")
+            print("🔥 ERROR CRÍTICO AL GUARDAR PORTAFOLIO:")
             traceback.print_exc()
             return False
 
