@@ -231,7 +231,8 @@ class PortfolioController:
     def create_portfolio(
         portfolio_name: str, description: str, assets: list
     ) -> bool:
-        """Crea un nuevo portafolio e inserta sus activos usando SQLAlchemy autónomo."""
+        """Crea un nuevo portafolio e inserta sus activos con diagnóstico de errores detallado."""
+        import traceback
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
@@ -266,7 +267,9 @@ class PortfolioController:
                     
             return True
         except Exception as e:
-            print(f"❌ Error al crear el portafolio: {e}")
+            print("🔥 --- ERROR DETALLADO AL CREAR PORTAFOLIO ---")
+            traceback.print_exc()  # Esto imprimirá el error exacto y la línea exacta en tu terminal
+            print("---------------------------------------------")
             return False
 
     @staticmethod
