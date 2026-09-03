@@ -248,7 +248,7 @@ def render():
                 st.markdown(f"### 💡 Diagnóstico Especializado: **{long_name} ({symbol})** [{asset_category}]")
 
                 # =============================================================
-                # FRAMES ESPECÍFICOS SEGÚN LA CLASE DE ACTIVO
+                # FRAMES ESPECÍFICOS Y TARJETAS SEGÚN LA CLASE DE ACTIVO
                 # =============================================================
                 
                 # --- CASO A: ACCIONES (EQUITIES) ---
@@ -274,8 +274,8 @@ def render():
 
                     # Fila 2 Acciones
                     col_l1, col_l2, col_l3, col_l4 = st.columns(4)
-                    with col_l1: st.metric("Capitalización", f"${market_cap:,.0f}" if market_cap else "N/A")
-                    with col_l2: st.metric("EPS (Utilidad/Acción)", f"${eps:,.2f}" if eps is not None else "N/A")
+                    with col_l1: st.metric("Capitalización", f"${market_cap:,.0f}" if market_cap else "N/A", "Valor total de mercado")
+                    with col_l2: st.metric("EPS (Utilidad/Acción)", f"${eps:,.2f}" if eps is not None else "N/A", "Ganancia neta por título")
                     with col_l3: 
                         pb_str = f"{pb_ratio:.2f}" if pb_ratio is not None else "N/A"
                         st.metric("Precio / Valor en Libros", pb_str, "Valuación patrimonial")
@@ -283,21 +283,25 @@ def render():
                         beta_str = f"{beta:.2f}" if beta is not None else "N/A"
                         st.metric("Beta (Volatilidad)", beta_str, "Riesgo frente al mercado")
 
-                    pe_text = f"Con un P/E de {pe_ratio:.1f}x y un P/B de {pb_ratio:.2f}x, la acción cotiza con exigentes expectativas." if pe_ratio and pb_ratio else "Valuación en seguimiento."
-                    roe_text = f"ROE del {(roe*100):.1f}% y margen neto del {(profit_margin*100):.1f}%." if roe and profit_margin else "Rentabilidad bajo revisión."
-                    risk_text = f"Deuda/Capital en {debt_to_equity:.1f}% con un Beta de {beta:.2f}." if debt_to_equity is not None and beta is not None else "Perfil de riesgo moderado."
+                    st.markdown("---")
+
+                    pe_text = f"Con un P/E de {pe_ratio:.1f}x y un P/B de {pb_ratio:.2f}x, la acción cotiza con una prima exigente, reflejando altas expectativas de crecimiento futuro." if pe_ratio and pb_ratio and pe_ratio > 30 else f"P/E de {pe_ratio if pe_ratio else 'N/A'}x y P/B de {pb_ratio if pb_ratio else 'N/A'}, sugiriendo una valoración equilibrada frente a sus fundamentales."
+                    roe_text = f"Destacada eficiencia en la generación de valor con un ROE del {(roe*100):.1f}% y un margen neto del {(profit_margin*100):.1f}%, demostrando un sólido poder de fijación de precios y control de costos." if roe and profit_margin else "Rentabilidad bajo revisión por falta de datos históricos completos."
+                    risk_text = f"Nivel de apalancamiento (Deuda/Capital) ubicado en un sano {debt_to_equity:.1f}%. El coeficiente Beta de {beta:.2f} indica una volatilidad superior a la media del mercado, ideal para estrategias dinámicas." if debt_to_equity is not None and beta is not None else "Perfil de riesgo moderado bajo las condiciones actuales del sector."
+                    
                     potencial = ((target_price - curr_price) / curr_price) * 100 if target_price and target_price > 0 else 0.0
-                    target_text = f"Precio objetivo medio en <b>${target_price:,.2f}</b> (Potencial: <b>{potencial:+.1f}%</b>)." if target_price else "Sin cobertura de precio objetivo."
+                    target_text = f"El consenso de analistas (Opinión: <b>{recommendation.replace('_', ' ')}</b>) proyecta un precio objetivo medio de <b>${target_price:,.2f}</b>, lo que representa un potencial de retorno estimado de <b>{potencial:+.1f}%</b> desde el precio actual." if target_price else "Sin cobertura de precio objetivo activo por el consenso."
 
                     html_interpretation = (
-                        f'<div style="background-color: #e8f4f8; border-left: 5px solid #29b6f6; padding: 18px 20px; border-radius: 8px; color: #1a202c; margin-bottom: 20px;">'
-                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">📝 Diagnóstico Accionario:</div>'
+                        f'<div style="background-color: #e8f4f8; border-left: 5px solid #29b6f6; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">📝 Diagnóstico Financiero Integral y Análisis Técnico:</div>'
                         f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
-                        f'<li><b>Valuación:</b> {pe_text}</li>'
-                        f'<li><b>Rentabilidad:</b> {roe_text}</li>'
-                        f'<li><b>Riesgo:</b> {risk_text}</li>'
-                        f'<li><b>Consenso:</b> {target_text}</li>'
-                        f'</ul></div>'
+                        f'<li style="margin-bottom: 8px;"><b>🏢 Valuación y Múltiplos de Mercado:</b> {pe_text}</li>'
+                        f'<li style="margin-bottom: 8px;"><b>📈 Rentabilidad y Calidad Operativa:</b> {roe_text}</li>'
+                        f'<li style="margin-bottom: 8px;"><b>⚖️ Estructura de Capital y Riesgo Sistemático (Beta):</b> {risk_text}</li>'
+                        f'<li style="margin-bottom: 0px;"><b>🎯 Perspectiva de Wall Street y Consenso:</b> {target_text}</li>'
+                        f'</ul>'
+                        f'</div>'
                     )
 
                 # --- CASO B: COMMODITIES / METALES ---
@@ -309,9 +313,11 @@ def render():
                     with c3: st.metric("Mínimo 52 Semanas", f"${w52_low:,.2f}" if w52_low else "N/A")
                     with c4: st.metric("Volumen Diario", f"{volume:,.0f}" if volume else "N/A")
 
+                    st.markdown("---")
                     html_interpretation = (
-                        f'<div style="background-color: #fff9e6; border-left: 5px solid #ffb300; padding: 16px; border-radius: 8px; margin-top: 15px; margin-bottom: 15px; color: #1a202c;">'
-                        f'<b>📝 Diagnóstico de Commodity / Metal:</b> Activo físico cotizado en mercados internacionales. Su comportamiento responde a la oferta y demanda global, expectativas de inflación y cobertura de riesgo geopolítico.'
+                        f'<div style="background-color: #fff9e6; border-left: 5px solid #ffb300; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #f57c00;">📝 Diagnóstico de Commodity / Materia Prima:</div>'
+                        f'<p style="margin: 0; line-height: 1.6;">Activo físico negociado en mercados globales. Su dinámica de precios responde directamente a los balances de oferta y demanda internacional, tensiones geopolíticas, flujos de cobertura contra la inflación y movimientos en las tasas de interés reales de la economía.</p>'
                         f'</div>'
                     )
 
@@ -319,18 +325,20 @@ def render():
                 elif asset_category == "Index":
                     c1, c2, c3, c4 = st.columns(4)
                     with c1: st.metric("Valor del Índice", f"{curr_price:,.2f} pts", f"{chg_pct:+.2f}%")
-                    with c2: st.metric("Máximo 52 Semanas", f"{w52_high:,.2f}" if w52_high else "N/A")
-                    with c3: st.metric("Mínimo 52 Semanas", f"{w52_low:,.2f}" if w52_low else "N/A")
+                    with c2: st.metric("Máximo 52 Semanas", f"${w52_high:,.2f}" if w52_high else "N/A")
+                    with c3: st.metric("Mínimo 52 Semanas", f"${w52_low:,.2f}" if w52_low else "N/A")
                     with c4: st.metric("Tendencia General", "Alcista / Estable" if chg_pct >= 0 else "Corrección / Bajista")
 
+                    st.markdown("---")
                     html_interpretation = (
-                        f'<div style="background-color: #e8f8f0; border-left: 5px solid #2e7d32; padding: 16px; border-radius: 8px; margin-top: 15px; margin-bottom: 15px; color: #1a202c;">'
-                        f'<b>📝 Diagnóstico de Índice Bursátil:</b> Indicador agregado que refleja el sentimiento conjunto de múltiples empresas y la dirección macroeconómica del mercado.'
+                        f'<div style="background-color: #e8f8f0; border-left: 5px solid #2e7d32; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #2e7d32;">📝 Diagnóstico de Índice Bursátil:</div>'
+                        f'<p style="margin: 0; line-height: 1.6;">Indicador de referencia ponderado que refleja el comportamiento agregado del mercado accionario o de un sector específico. Sirve como termómetro para medir la confianza general de los inversores institucionales y la dirección macroeconómica global.</p>'
                         f'</div>'
                     )
 
-                # --- CASO D: DIVISAS / FOREX (INCLUYENDO BCV) ---
-                else: # Currency / Forex
+                # --- CASO D: DIVISAS / FOREX ---
+                else: 
                     c1, c2, c3, c4 = st.columns(4)
                     prefix_curr = "Bs. " if "VES" in symbol else ""
                     with c1: st.metric("Tasa de Cambio", f"{prefix_curr}{curr_price:,.4f}", f"{chg_pct:+.2f}%")
@@ -338,63 +346,79 @@ def render():
                     with c3: st.metric("Mínimo del Periodo", f"{prefix_curr}{df_hist['Low'].min():,.4f}" if not df_hist.empty else "N/A")
                     with c4: st.metric("Par / Divisa", symbol)
 
+                    st.markdown("---")
                     html_interpretation = (
-                        f'<div style="background-color: #f3e5f5; border-left: 5px solid #7b1fa2; padding: 16px; border-radius: 8px; margin-top: 15px; margin-bottom: 15px; color: #1a202c;">'
-                        f'<b>📝 Diagnóstico Cambiario / Forex:</b> Tipo de cambio oficial o par de divisas internacionales. Evalúa la paridad, la devaluación acumulada y la dinámica de la política monetaria.'
+                        f'<div style="background-color: #f3e5f5; border-left: 5px solid #7b1fa2; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #7b1fa2;">📝 Diagnóstico Cambiario / Forex:</div>'
+                        f'<p style="margin: 0; line-height: 1.6;">Par de divisas o tipo de cambio oficial. Evalúa la paridad de poder adquisitivo, la velocidad de devaluación o revaluación cambiaria y las directrices de política monetaria del banco central emisor.</p>'
                         f'</div>'
                     )
 
                 st.markdown(html_interpretation, unsafe_allow_html=True)
                 st.markdown("---")
-
-                # GRÁFICO DE VELAS PLOTLY
                 st.write(f"### Evolución del Precio (Velas Japonesas): **{symbol}**")
-                df_hist_reset = df_hist.reset_index()
+
+                # GRÁFICO DE VELAS CON PLOTLY
+                df_hist = df_hist.reset_index()
                 fig = go.Figure(
                     data=[
                         go.Candlestick(
-                            x=df_hist_reset["Date"],
-                            open=df_hist_reset["Open"],
-                            high=df_hist_reset["High"],
-                            low=df_hist_reset["Low"],
-                            close=df_hist_reset["Close"],
+                            x=df_hist["Date"],
+                            open=df_hist["Open"],
+                            high=df_hist["High"],
+                            low=df_hist["Low"],
+                            close=df_hist["Close"],
                             name=symbol,
                             increasing_line_color="#26a69a",
                             decreasing_line_color="#ef5350",
                         )
                     ]
                 )
+
                 fig.update_layout(
                     xaxis_rangeslider_visible=False,
                     template="plotly_dark",
                     margin=dict(l=10, r=10, t=30, b=10),
                     height=450,
                 )
-                st.plotly_chart(fig, use_container_width=True, key=f"candlestick_{symbol}_{period}")
 
-                # RESUMEN DE DATOS HISTÓRICOS Y BOTÓN DE GUARDADO
+                st.plotly_chart(fig, use_container_width=True, key=f"candlestick_chart_{symbol}_{period}")
+
                 col_sub1, col_sub2 = st.columns([3, 1])
                 with col_sub1:
                     st.subheader("📊 Resumen de Datos Históricos")
                     st.dataframe(
-                        df_hist_reset[["Date", "Open", "High", "Low", "Close", "Volume"]].tail(10),
+                        df_hist[["Date", "Open", "High", "Low", "Close", "Volume"]].tail(10),
                         use_container_width=True,
                     )
 
                 with col_sub2:
-                    st.subheader("💾 Guardar Activo")
-                    st.metric("Último Precio", f"{curr_price:,.4f}", f"{chg_pct:+.2f}%")
-                    if st.button(f"💾 Guardar en TiDB", key="save_search_asset"):
+                    st.subheader("💾 Guardar Búsqueda")
+                    st.metric(
+                        "Último Precio",
+                        f"${curr_price:,.2f}",
+                        f"{chg_pct:+.2f}%",
+                    )
+                    asset_type_input = st.selectbox(
+                        "Tipo de Activo",
+                        ["Equity", "Commodity", "Index", "Crypto", "FX"],
+                        key="select_asset_type_save",
+                    )
+                    if st.button(f"💾 Guardar {symbol} en TiDB", key="save_search_asset"):
                         if PortfolioController.save_market_quote(
-                            symbol, long_name, asset_category, curr_price, chg_pct
+                            symbol,
+                            long_name,
+                            asset_type_input,
+                            curr_price,
+                            chg_pct,
                         ):
-                            st.success(f"✅ {symbol} guardado exitosamente.")
+                            st.success(f"✅ {symbol} ({long_name}) guardado en TiDB Cloud.")
                         else:
                             st.error("❌ Error al guardar en TiDB.")
             else:
-                st.warning(f"⚠️ No se encontraron datos históricos para '{symbol}'. Verifique la nomenclatura.")
+                st.warning(f"⚠️ No se encontraron datos para el símbolo '{symbol}'. Verifique la nomenclatura.")
         except Exception as err:
-            st.error(f"❌ Error al procesar el activo: {err}")
+            st.error(f"❌ Error al obtener los datos de mercado: {err}")
 
     st.markdown("---")
 
@@ -402,16 +426,16 @@ def render():
     # 3. HISTORIAL DE COTIZACIONES EN TiDB
     # -------------------------------------------------------------------------
     st.subheader("📋 Historial de Cotizaciones Registradas en TiDB")
-    if st.button("🔄 Cargar / Refrescar Cotizaciones"):
+    if st.button("🔄 Cargar / Refrescar Cotizaciones de la BD"):
         quotes = PortfolioController.get_market_quotes()
         if quotes:
             df_quotes = pd.DataFrame(quotes)
             st.dataframe(
                 df_quotes.style.format({
-                    "price": "{:,.4f}",
+                    "price": "${:,.2f}",
                     "change_percent": "{:+.2f}%",
                 }),
                 use_container_width=True,
             )
         else:
-            st.info("ℹ️ No hay cotizaciones guardadas en TiDB Cloud.")
+            st.info("ℹ️ No hay cotizaciones guardadas aún en TiDB Cloud.")
