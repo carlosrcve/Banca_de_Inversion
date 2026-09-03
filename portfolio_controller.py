@@ -234,12 +234,10 @@ class PortfolioController:
         """Crea un nuevo portafolio e inserta sus activos usando tus columnas reales ('name', 'ticker', etc.)."""
         conn = get_secure_db_connection()
         if not conn:
-            st.error("❌ No se pudo establecer conexión segura con la base de datos.")
             return False
 
         try:
             cursor = conn.cursor()
-            # Ajustado a la tabla portfolios con columna 'name'
             query_portfolio = """
                 INSERT INTO portfolios (name, description)
                 VALUES (%s, %s)
@@ -247,7 +245,6 @@ class PortfolioController:
             cursor.execute(query_portfolio, (portfolio_name, description))
             portfolio_id = cursor.lastrowid
 
-            # Ajustado a la tabla portfolio_assets con tus nombres de columna reales
             query_asset = """
                 INSERT INTO portfolio_assets (portfolio_id, ticker, asset_name, asset_class, quantity, purchase_price, acquisition_date)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
@@ -271,9 +268,7 @@ class PortfolioController:
             conn.close()
             return True
         except Exception as e:
-            # ESTO MOSTRARÁ EL ERROR REAL EN LA PANTALLA DE STREAMLIT PARA VER QUÉ FALLA
-            st.error(f"❌ Error técnico detallado: {e}")
-            print(f"Error al crear el portafolio en TiDB: {e}")
+            print(f"❌ Error detallado al crear el portafolio en TiDB: {e}")
             if conn:
                 try:
                     conn.rollback()
