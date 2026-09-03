@@ -1,3 +1,4 @@
+# mod_markets.py
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -52,107 +53,6 @@ def get_ticker_snapshot(symbol: str):
         return float(price), float(change_pct)
     except Exception:
         return 0.0, 0.0
-
-
-# -------------------------------------------------------------------------
-# FRAGMENTOS CON ESTADO AISLADO
-# -------------------------------------------------------------------------
-@st.fragment
-def render_metals_column():
-    st.subheader("🪙 Metales y Commodities")
-    dict_metales = {
-        "Oro (Gold Spot)": "GC=F",
-        "Plata (Silver)": "SI=F",
-        "Cobre (Copper)": "HG=F",
-        "Platino (Platinum)": "PL=F",
-        "Petróleo WTI": "CL=F",
-    }
-    selected_metal_name = st.selectbox(
-        "Seleccione el Metal:", list(dict_metales.keys()), key="sel_metal"
-    )
-    metal_ticker = dict_metales[selected_metal_name]
-
-    state_key = f"data_{metal_ticker}"
-    if state_key not in st.session_state or st.session_state.get("last_metal") != metal_ticker:
-        st.session_state[state_key] = get_ticker_snapshot(metal_ticker)
-        st.session_state["last_metal"] = metal_ticker
-
-    m_price, m_chg = st.session_state[state_key]
-    st.metric(selected_metal_name, f"${m_price:,.2f}", f"{m_chg:+.2f}%")
-
-    if st.button(f"💾 Guardar {selected_metal_name}", key="save_metal_btn"):
-        success, err_details = PortfolioController.save_market_quote(
-            symbol=metal_ticker,
-            asset_name=selected_metal_name,
-            asset_type="Commodity",
-            price=float(m_price),
-            change_percent=float(m_chg),
-        )
-        if success:
-            st.success(f"✅ {selected_metal_name} guardado en TiDB.")
-        else:
-            st.error(f"❌ Error al guardar en TiDB: {err_details}")
-
-@st.fragment
-def render_indices_column():
-    st.subheader("📊 Índices Bursátiles")
-    dict_indices = {
-        "Nasdaq Composite": "^IXIC",
-        "S&P 500": "^GSPC",
-        "Dow Jones Industrial": "^DJI",
-        "Russell 2000": "^RUT",
-        "FTSE 100 (UK)": "^FTSE",
-    }
-    selected_index_name = st.selectbox(
-        "Seleccione el Índice:", list(dict_indices.keys()), key="sel_index"
-    )
-    index_ticker = dict_indices[selected_index_name]
-
-    state_key = f"data_{index_ticker}"
-    if state_key not in st.session_state or st.session_state.get("last_index") != index_ticker:
-        st.session_state[state_key] = get_ticker_snapshot(index_ticker)
-        st.session_state["last_index"] = index_ticker
-
-    i_price, i_chg = st.session_state[state_key]
-    st.metric(selected_index_name, f"{i_price:,.2f} pts", f"{i_chg:+.2f}%")
-
-    if st.button(f"💾 Guardar {selected_index_name}", key="save_index_btn"):
-        if PortfolioController.save_market_quote(
-            index_ticker, selected_index_name, "Index", i_price, i_chg
-        ):
-            st.success(f"✅ {selected_index_name} guardado en TiDB.")
-        else:
-            st.error("❌ Error al guardar en TiDB.")
-
-
-@st.fragment
-def render_stocks_column():
-    st.subheader("🏢 Acciones Wall Street")
-    dict_acciones = load_sp500_tickers()
-
-    selected_stock_label = st.selectbox(
-        f"Seleccione ({len(dict_acciones)} Acciones):",
-        options=list(dict_acciones.keys()),
-        key="sel_stock",
-    )
-    stock_ticker = dict_acciones[selected_stock_label]
-
-    state_key = f"data_{stock_ticker}"
-    if state_key not in st.session_state or st.session_state.get("last_stock") != stock_ticker:
-        st.session_state[state_key] = get_ticker_snapshot(stock_ticker)
-        st.session_state["last_stock"] = stock_ticker
-
-    s_price, s_chg = st.session_state[state_key]
-    display_name = selected_stock_label.split(" - ")[0]
-    st.metric(display_name, f"${s_price:,.2f}", f"{s_chg:+.2f}%")
-
-    if st.button(f"💾 Guardar {stock_ticker}", key="save_stock_btn"):
-        if PortfolioController.save_market_quote(
-            stock_ticker, selected_stock_label, "Equity", s_price, s_chg
-        ):
-            st.success(f"✅ {stock_ticker} guardado en TiDB.")
-        else:
-            st.error("❌ Error al guardar en TiDB.")
 
 
 # -------------------------------------------------------------------------
@@ -231,12 +131,13 @@ def render():
         st.metric(selected_index_name, f"{i_price:,.2f} pts", f"{i_chg:+.2f}%")
 
         if st.button("💾 Guardar", key="save_index_btn", use_container_width=True):
-            if PortfolioController.save_market_quote(
+            success, err_msg = PortfolioController.save_market_quote(
                 index_ticker, selected_index_name, "Index", i_price, i_chg
-            ):
+            )
+            if success:
                 st.success("✅ Guardado.")
             else:
-                st.error("❌ Error al guardar.")
+                st.error(f"❌ Error: {err_msg}")
 
     # 3. ACCIONES
     with col_m3:
@@ -254,12 +155,13 @@ def render():
         st.metric(selected_stock_label.split(" - ")[0], f"${s_price:,.2f}", f"{s_chg:+.2f}%")
 
         if st.button("💾 Guardar", key="save_stock_btn", use_container_width=True):
-            if PortfolioController.save_market_quote(
+            success, err_msg = PortfolioController.save_market_quote(
                 stock_ticker, selected_stock_label, "Equity", s_price, s_chg
-            ):
+            )
+            if success:
                 st.success("✅ Guardado.")
             else:
-                st.error("❌ Error al guardar.")
+                st.error(f"❌ Error: {err_msg}")
 
     # 4. DIVISAS BCV
     with col_m4:
