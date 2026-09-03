@@ -399,30 +399,48 @@ def render():
                     beta_str = f"{beta:.2f}" if beta is not None else "N/A"
                     st.metric("Beta (Volatilidad)", beta_str, "Riesgo frente al mercado")
 
-                # Criterios automáticos de orientación al inversor
-                mensajes_analisis = []
-                if w52_high and w52_low:
-                    if curr_price >= (w52_high * 0.90):
-                        mensajes_analisis.append(f"⚠️ **Precio cercano a máximos anuales (${w52_high:,.2f}):** El activo muestra gran fortaleza, pero evalúe si está pagando una prima elevada.")
-                    elif curr_price <= (w52_low * 1.10):
-                        mensajes_analisis.append(f"💰 **Precio cercano a mínimos anuales (${w52_low:,.2f}):** Podría ser una oportunidad de valor si los fundamentales de la empresa se mantienen sólidos.")
+                # Fila 4 de Métricas: Margen, Deuda, P/B y Volatilidad (Beta)
+                st.write("DEBUG: Cargando fila 4 de métricas (Salud Financiera y Riesgo)...")
+                col_l1, col_l2, col_l3, col_l4 = st.columns(4)
                 
-                if pe_ratio:
-                    if pe_ratio > 35:
-                        mensajes_analisis.append(f"📈 **Valuación exigida:** Con un P/E de {pe_ratio:.1f}, el mercado está descontando un crecimiento muy agresivo de beneficios a futuro.")
-                    elif pe_ratio < 15:
-                        mensajes_analisis.append(f"📉 **Valuación atractiva:** Un P/E de {pe_ratio:.1f} muestra que cotiza a un múltiplo moderado frente a sus ganancias.")
+                with col_l1:
+                    margin_str = f"{profit_margin*100:.1f}%" if profit_margin is not None else "N/A"
+                    st.metric("Margen de Utilidad Neta", margin_str, "Eficiencia en ganancias")
+                with col_l2:
+                    debt_str = f"{debt_to_equity:.1f}%" if debt_to_equity is not None else "N/A"
+                    st.metric("Deuda / Capital (D/E)", debt_str, "Nivel de apalancamiento")
+                with col_l3:
+                    pb_str = f"{pb_ratio:.2f}x" if pb_ratio is not None else "N/A"
+                    st.metric("Precio / Valor en Libros", pb_str, "Valuación patrimonial")
+                with col_l4:
+                    beta_str = f"{beta:.2f}" if beta is not None else "N/A"
+                    st.metric("Beta (Volatilidad)", beta_str, "Riesgo frente al mercado")
 
-                if target_price and target_price > 0:
-                    potencial = ((target_price - curr_price) / curr_price) * 100
-                    mensajes_analisis.append(f"🎯 **Precio Objetivo del Consenso:** Los analistas proyectan un valor medio de **${target_price:,.2f}** (un potencial estimado de **{potencial:+.1f}%**).")
+                st.markdown("---")
 
-                if not mensajes_analisis:
-                    mensajes_analisis.append("ℹ️ Activo cotizando bajo condiciones estables de mercado. Monitoree las tendencias del sector.")
+                # =============================================================
+                # GENERACIÓN DE ANÁLISIS TÉCNICO Y PEDAGÓGICO AVANZADO (HTML)
+                # =============================================================
+                pe_text = f"Con un P/E de {pe_ratio:.1f}x y un P/B de {pb_ratio:.2f}x, la acción cotiza con una prima exigente, reflejando altas expectativas de crecimiento futuro." if pe_ratio and pe_ratio > 30 else f"P/E de {pe_ratio:.1f}x y P/B de {pb_ratio:.2f}x, sugiriendo una valoración equilibrada frente a sus fundamentales."
+                roe_text = f"Destacada eficiencia en la generación de valor con un ROE del {(roe*100):.1f}% y un margen neto del {(profit_margin*100):.1f}%, demostrando un sólido poder de fijación de precios y control de costos." if roe and profit_margin else "Rentabilidad bajo revisión por falta de datos históricos completos."
+                risk_text = f"Nivel de apalancamiento (Deuda/Capital) ubicado en un sano {debt_to_equity:.1f}%. El coeficiente Beta de {beta:.2f} indica una volatilidad superior a la media del mercado, ideal para estrategias dinámicas." if debt_to_equity is not None and beta is not None else "Perfil de riesgo moderado bajo las condiciones actuales del sector."
+                
+                potencial = ((target_price - curr_price) / curr_price) * 100 if target_price and target_price > 0 else 0.0
+                target_text = f"El consenso de analistas (Opinión: <b>{recommendation.replace('_', ' ')}</b>) proyecta un precio objetivo medio de <b>${target_price:,.2f}</b>, lo que representa un potencial de retorno estimado de <b>{potencial:+.1f}%</b> desde el precio actual." if target_price else "Sin cobertura de precio objetivo activo por el consenso."
 
-                for msg in mensajes_analisis:
-                    st.info(msg)
+                html_interpretation = (
+                    f'<div style="background-color: #e8f4f8; border-left: 5px solid #29b6f6; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                    f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #0288d1;">📝 Diagnóstico Financiero Integral y Análisis Técnico:</div>'
+                    f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
+                    f'<li style="margin-bottom: 8px;"><b>🏢 Valuación y Múltiplos de Mercado:</b> {pe_text}</li>'
+                    f'<li style="margin-bottom: 8px;"><b>📈 Rentabilidad y Calidad Operativa:</b> {roe_text}</li>'
+                    f'<li style="margin-bottom: 8px;"><b>⚖️ Estructura de Capital y Riesgo Sistemático (Beta):</b> {risk_text}</li>'
+                    f'<li style="margin-bottom: 0px;"><b>🎯 Perspectiva de Wall Street y Consenso:</b> {target_text}</li>'
+                    f'</ul>'
+                    f'</div>'
+                )
 
+                st.markdown(html_interpretation, unsafe_allow_html=True)
                 st.markdown("---")
                 st.write(f"### Evolución del Precio (Velas Japonesas): **{symbol}**")
 
