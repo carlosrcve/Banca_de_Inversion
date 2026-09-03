@@ -64,17 +64,18 @@ def render():
             df_temp = pd.DataFrame(st.session_state.temp_assets)
             st.dataframe(df_temp, use_container_width=True)
 
-            # Dentro de tu mod_portfolio.py, en la sección donde guardas:
-            if st.button("Guardar Portafolio Completo en TiDB Cloud"):
-                if p_name and st.session_state.temp_assets:
-                    exito = PortfolioController.create_portfolio(p_name, p_desc, st.session_state.temp_assets)
-                    if exito:
-                        st.success("¡Portafolio guardado exitosamente en TiDB Cloud! 🎉")
-                        st.session_state.temp_assets = []  # Limpiar lista temporal si deseas
-                    else:
-                        st.error("❌ Ocurrió un error al guardar el portafolio. Revisa la consola para ver el detalle de PyMySQL/TiDB.")
+            if st.button(
+                "💾 Guardar Portafolio Completo en TiDB Cloud", type="primary"
+            ):
+                if PortfolioController.create_portfolio(
+                    p_name, p_desc, st.session_state.temp_assets
+                ):
+                    st.success(
+                        f"✅ Portafolio '{p_name}' guardado exitosamente en TiDB Cloud."
+                    )
+                    st.session_state.temp_assets = []
                 else:
-                        st.warning("⚠️ Debes ingresar un nombre y al menos un activo.")
+                    st.error("❌ Ocurrió un error al guardar el portafolio.")
 
     with tab2:
         st.subheader("Consultar Portafolios Almacenados")
