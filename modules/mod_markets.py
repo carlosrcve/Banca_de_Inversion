@@ -339,6 +339,82 @@ def render():
             key="select_search_period",
         )
 
+    # 1. Entrada de texto del usuario
+    input_usuario = st.text_input("Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, Oro, Dolar BCV, S&P 500):", "Oro")
+
+    # 2. Diccionario ampliado de lenguaje natural a Tickers de Yahoo Finance
+    traductor_global = {
+        # --- COMMODITIES / METALES ---
+        "oro": "GC=F",
+        "gold": "GC=F",
+        "plata": "SI=F",
+        "silver": "SI=F",
+        "cobre": "HG=F",
+        "copper": "HG=F",
+        "platino": "PL=F",
+        "platinum": "PL=F",
+        "petroleo": "CL=F",
+        "petróleo": "CL=F",
+        "wti": "CL=F",
+
+        # --- VENEZUELA (BCV / DIVISAS OFICIALES) ---
+        "dolar bcv": "USDVES=X",
+        "dólar bcv": "USDVES=X",
+        "dolar": "USDVES=X",
+        "dólar": "USDVES=X",
+        "euro bcv": "EURVES=X",
+        "euro": "EURVES=X",
+
+        # --- ÍNDICES BURSÁTILES GLOBALES ---
+        "s&p 500": "^GSPC",
+        "sp500": "^GSPC",
+        "nasdaq": "^IXIC",
+        "nasdaq 100": "^NDX",
+        "dow jones": "^DJI",
+        "ibex": "^IBEX",
+        "bitcoin": "BTC-USD",
+
+        # --- ACCIONES POPULARES (Ejemplos) ---
+        "apple": "AAPL",
+        "tesla": "TSLA",
+        "nvidia": "NVDA",
+        "microsoft": "MSFT",
+        "amazon": "AMZN"
+    }
+
+    # 3. Procesamiento y Limpieza Inteligente
+    limpio = input_usuario.strip().lower()
+
+    if limpio in traductor_global:
+        symbol = traductor_global[limpio]
+        
+        # Asignación automática de categoría según el tipo de activo traducido
+        if symbol in ["GC=F", "SI=F", "HG=F", "PL=F", "CL=F"]:
+            asset_category = "Commodity"
+        elif "VES" in symbol:
+            asset_category = "Currency"  # O tu categoría para el BCV
+        elif symbol.startswith("^"):
+            asset_category = "Index"
+        else:
+            asset_category = "Equity"
+            
+    else:
+        # Si el usuario escribe directamente un ticker tradicional (ej. AAPL, MSFT, ^IXIC)
+        symbol = input_usuario.strip().upper()
+        
+        # Tu lógica original de respaldo para detectar categorías si escriben el ticker directo
+        if symbol.startswith("^"):
+            asset_category = "Index"
+        elif "VES" in symbol:
+            asset_category = "Currency"
+        elif "=" in symbol or "-USD" in symbol:
+            asset_category = "Forex"
+        else:
+            asset_category = "Equity"
+
+    # ==========================================
+    # INICIO DE EJECUCIÓN SI EXISTE SÍMBOLO
+    # ==========================================
     if symbol:
         try:
             asset = yf.Ticker(symbol)
@@ -348,7 +424,7 @@ def render():
                 curr_price, chg_pct = get_ticker_snapshot(symbol)
 
                 # ==========================================
-                # PEGA LA DETECCIÓN AUTOMÁTICA AQUÍ 👇
+                # DETECCIÓN AUTOMÁTICA DE REFUERZO
                 # ==========================================
                 symbol_upper = symbol.upper()
                 if "=" in symbol_upper or "-USD" in symbol_upper:
@@ -484,7 +560,6 @@ def render():
                 elif asset_category == "Commodity":
                     volume = info.get("volume", 0) if info.get("volume") is not None else 0
                     
-                    # Validación de seguridad para evitar errores con NoneType
                     safe_curr_price = curr_price if curr_price is not None else 0.0
                     safe_chg_pct = chg_pct if chg_pct is not None else 0.0
                     
@@ -508,6 +583,7 @@ def render():
                         '<p style="margin: 0; line-height: 1.6;">Activos tangibles de cobertura contra la inflación y refugio geopolítico. Su comportamiento está dictado por los flujos de contratos de futuros, la oferta física y las expectativas monetarias globales.</p>'
                         '</div>'
                     )
+
                 # =========================================================================
                 # 3. FRAME ESPECIALIZADO: ÍNDICES BURSÁTILES (INDEX)
                 # =========================================================================
@@ -571,7 +647,6 @@ def render():
                         '</div>'
                     )
 
-                # Renderizar cuadro de interpretación final y continuar con gráficos o componentes
                 st.markdown(html_interpretation, unsafe_allow_html=True)
                 st.markdown("---")
 
@@ -713,7 +788,6 @@ def render():
             st.error(f"❌ Error al obtener los datos de mercado: {err}")
 
     st.markdown("---")
-
     # -------------------------------------------------------------------------
     # 3. HISTORIAL DE COTIZACIONES EN TiDB
     # -------------------------------------------------------------------------
