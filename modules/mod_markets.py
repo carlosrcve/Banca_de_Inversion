@@ -327,8 +327,8 @@ def render():
     col_search1, col_search2 = st.columns([3, 1])
     with col_search1:
         input_usuario = st.text_input(
-            "Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, NVDA, Oro, Dolar BCV, S&P 500):",
-            value="Oro",
+            "Ingrese el Ticker o Símbolo de Mercado (ej. AAPL, NVDA, Oro, Bitcoin, S&P 500):",
+            value="Bitcoin",
             key="input_search_symbol",
         )
     with col_search2:
@@ -362,6 +362,30 @@ def render():
         "euro bcv": "EURVES=X",
         "euro": "EURVES=X",
 
+        # --- CRIPTOMONEDAS / MONEDAS DIGITALES ---
+        "bitcoin": "BTC-USD",
+        "btc": "BTC-USD",
+        "ethereum": "ETH-USD",
+        "eth": "ETH-USD",
+        "tether": "USDT-USD",
+        "usdt": "USDT-USD",
+        "solana": "SOL-USD",
+        "sol": "SOL-USD",
+        "binance coin": "BNB-USD",
+        "bnb": "BNB-USD",
+        "ripple": "XRP-USD",
+        "xrp": "XRP-USD",
+        "cardano": "ADA-USD",
+        "ada": "ADA-USD",
+        "dogecoin": "DOGE-USD",
+        "doge": "DOGE-USD",
+        "avalanche": "AVAX-USD",
+        "avax": "AVAX-USD",
+        "polkadot": "DOT-USD",
+        "dot": "DOT-USD",
+        "chainlink": "LINK-USD",
+        "link": "LINK-USD",
+
         # --- ÍNDICES BURSÁTILES GLOBALES ---
         "s&p 500": "^GSPC",
         "sp500": "^GSPC",
@@ -369,14 +393,39 @@ def render():
         "nasdaq 100": "^NDX",
         "dow jones": "^DJI",
         "ibex": "^IBEX",
-        "bitcoin": "BTC-USD",
 
-        # --- ACCIONES POPULARES (Ejemplos) ---
+        # --- ACCIONES POPULARES (Ejemplos amplios) ---
         "apple": "AAPL",
         "tesla": "TSLA",
         "nvidia": "NVDA",
         "microsoft": "MSFT",
-        "amazon": "AMZN"
+        "amazon": "AMZN",
+        "google": "GOOGL",
+        "alphabet": "GOOGL",
+        "meta": "META",
+        "facebook": "META",
+        "netflix": "NFLX",
+        "amd": "AMD",
+        "intel": "INTC",
+        "tsmc": "TSM",
+        "micron": "MU",
+        "qualcomm": "QCOM",
+        "broadcom": "AVGO",
+        "berkshire hathaway": "BRK-B",
+        "berkshire": "BRK-B",
+        "jpmorgan": "JPM",
+        "visa": "V",
+        "mastercard": "MA",
+        "bank of america": "BAC",
+        "coca cola": "KO",
+        "pepsi": "PEP",
+        "walmart": "WMT",
+        "costco": "COST",
+        "disney": "DIS",
+        "nike": "NKE",
+        "palantir": "PLTR",
+        "uber": "UBER",
+        "airbnb": "ABNB"
     }
 
     # 3. Procesamiento y Limpieza Inteligente
@@ -389,22 +438,25 @@ def render():
         if symbol in ["GC=F", "SI=F", "HG=F", "PL=F", "CL=F"]:
             asset_category = "Commodity"
         elif "VES" in symbol:
-            asset_category = "Currency"  # O tu categoría para el BCV
+            asset_category = "Currency"
+        elif symbol.endswith("-USD"):
+            asset_category = "Crypto"
         elif symbol.startswith("^"):
             asset_category = "Index"
         else:
             asset_category = "Equity"
             
     else:
-        # Si el usuario escribe directamente un ticker tradicional (ej. AAPL, MSFT, ^IXIC)
+        # Si el usuario escribe directamente un ticker tradicional o de cripto (ej. AAPL, BTC-USD)
         symbol = input_usuario.strip().upper()
         
-        # Tu lógica original de respaldo para detectar categorías si escriben el ticker directo
         if symbol.startswith("^"):
             asset_category = "Index"
         elif "VES" in symbol:
             asset_category = "Currency"
-        elif "=" in symbol or "-USD" in symbol:
+        elif symbol.endswith("-USD") or "-USD" in symbol:
+            asset_category = "Crypto"
+        elif "=" in symbol:
             asset_category = "Forex"
         else:
             asset_category = "Equity"
@@ -424,7 +476,9 @@ def render():
                 # DETECCIÓN AUTOMÁTICA DE REFUERZO
                 # ==========================================
                 symbol_upper = symbol.upper()
-                if "=" in symbol_upper or "-USD" in symbol_upper:
+                if symbol_upper.endswith("-USD") or "-USD" in symbol_upper:
+                    asset_category = "Crypto"
+                elif "=" in symbol_upper:
                     if any(m in symbol_upper for m in ["GC", "SI", "CL", "HG", "PL"]):
                         asset_category = "Commodity"
                     elif "VES" in symbol_upper:
@@ -442,7 +496,6 @@ def render():
                 long_name = info.get("longName", info.get("shortName", symbol))
                 currency = info.get("currency", "USD")
                 
-                # Definición de variables preventivas para evitar errores en métricas o análisis
                 target_price = info.get("targetMeanPrice", None)
 
                 st.markdown(f"### 💡 Diagnóstico Financiero: **{long_name} ({symbol})**")
@@ -477,7 +530,6 @@ def render():
                     except Exception:
                         pass
 
-                    # Fila 1 Acciones
                     col_i1, col_i2, col_i3, col_i4 = st.columns(4)
                     with col_i1:
                         st.metric("Precio Actual", f"${curr_price:,.2f} {currency}", f"{chg_pct:+.2f}%")
@@ -491,7 +543,6 @@ def render():
                         rec_display = recommendation.replace("_", " ") if recommendation else "NEUTRAL"
                         st.metric("Opinión Wall Street", rec_display, "Consenso de analistas")
 
-                    # Fila 2 Acciones
                     col_j1, col_j2, col_j3, col_j4 = st.columns(4)
                     with col_j1:
                         mcap_str = f"${market_cap:,.0f}" if market_cap else "N/A"
@@ -504,7 +555,6 @@ def render():
                     with col_j4:
                         st.metric("Ganancias Trimestrales", q_net_str, "Utilidad neta trimestral")
 
-                    # Fila 3 Acciones
                     col_k1, col_k2, col_k3, col_k4 = st.columns(4)
                     with col_k1:
                         eps_str = f"${eps:,.2f}" if eps is not None else "N/A"
@@ -523,7 +573,6 @@ def render():
                             tot_divs_str = "N/A"
                         st.metric("Total Dividendos Pagados", tot_divs_str, "Estimación global anual")
 
-                    # Fila 4 Acciones
                     profit_margin = info.get("profitMargins", None)
                     debt_to_equity = info.get("debtToEquity", None)
                     pb_ratio = info.get("priceToBook", None)
@@ -552,7 +601,40 @@ def render():
                     )
 
                 # =========================================================================
-                # 2. FRAME ESPECIALIZADO: METALES Y COMMODITIES (METALS)
+                # 2. FRAME ESPECIALIZADO: CRIPTOMONEDAS (CRYPTO)
+                # =========================================================================
+                elif asset_category == "Crypto":
+                    market_cap_crypto = info.get("marketCap", None)
+                    volume_crypto = info.get("volume", info.get("regularMarketVolume", 0))
+                    circulating_supply = info.get("circulatingSupply", None)
+                    
+                    safe_curr_price = curr_price if curr_price is not None else 0.0
+                    safe_chg_pct = chg_pct if chg_pct is not None else 0.0
+                    
+                    high_period = df_hist['High'].max() if not df_hist.empty and pd.notnull(df_hist['High'].max()) else safe_curr_price
+                    low_period = df_hist['Low'].min() if not df_hist.empty and pd.notnull(df_hist['Low'].min()) else safe_curr_price
+
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1: 
+                        st.metric("Precio Spot Digital", f"${safe_curr_price:,.2f} USD", f"{safe_chg_pct:+.2f}%")
+                    with c2: 
+                        mcap_c_str = f"${market_cap_crypto:,.0f}" if market_cap_crypto else "N/A"
+                        st.metric("Capitalización de Mercado", mcap_c_str, "Valor total en red")
+                    with c3: 
+                        st.metric("Máximo del Periodo", f"${high_period:,.2f}", "Techo técnico temporal")
+                    with c4: 
+                        st.metric("Mínimo del Periodo", f"${low_period:,.2f}", "Soporte temporal")
+
+                    st.markdown("---")
+                    html_interpretation = (
+                        '<div style="background-color: #fff3e0; border-left: 5px solid #ff9800; padding: 18px 20px; border-radius: 8px; color: #1a202c; margin-bottom: 20px;">'
+                        '<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #e65100;">📝 Diagnóstico Especializado de Criptomonedas (Monedas Digitales):</div>'
+                        '<p style="margin: 0; line-height: 1.6;">Activos digitales descentralizados basados en tecnología blockchain. Su cotización responde fuertemente a la liquidez macroeconómica global, la adopción institucional, los ciclos de halving (en el caso de Bitcoin) y el sentimiento especulativo del mercado 24/7.</p>'
+                        '</div>'
+                    )
+
+                # =========================================================================
+                # 3. FRAME ESPECIALIZADO: METALES Y COMMODITIES (METALS)
                 # =========================================================================
                 elif asset_category == "Commodity":
                     volume = info.get("volume", 0) if info.get("volume") is not None else 0
@@ -582,7 +664,7 @@ def render():
                     )
 
                 # =========================================================================
-                # 3. FRAME ESPECIALIZADO: ÍNDICES BURSÁTILES (INDEX)
+                # 4. FRAME ESPECIALIZADO: ÍNDICES BURSÁTILES (INDEX)
                 # =========================================================================
                 elif asset_category == "Index":
                     high_index = df_hist['High'].max() if not df_hist.empty else 0
@@ -603,7 +685,7 @@ def render():
                     )
 
                 # =========================================================================
-                # 4. FRAME ESPECIALIZADO: DÓLAR / DIVISAS BANCO CENTRAL (BCV / VES)
+                # 5. FRAME ESPECIALIZADO: DÓLAR / DIVISAS BANCO CENTRAL (BCV / VES)
                 # =========================================================================
                 elif "VES" in symbol.upper() or "USDVES" in symbol.upper() or "EURVES" in symbol.upper() or asset_category == "Currency":
                     high_bcv = df_hist['High'].max() if not df_hist.empty else curr_price
@@ -624,7 +706,7 @@ def render():
                     )
 
                 # =========================================================================
-                # 5. FRAME ESPECIALIZADO: MERCADO FOREX GLOBAL (PARES INTERNACIONALES)
+                # 6. FRAME ESPECIALIZADO: MERCADO FOREX GLOBAL (PARES INTERNACIONALES)
                 # =========================================================================
                 else:
                     high_fx = df_hist['High'].max() if not df_hist.empty else curr_price
@@ -666,6 +748,19 @@ def render():
                         f'<li style="margin-bottom: 8px;"><b>📈 Rentabilidad y Calidad Operativa:</b> {roe_text}</li>'
                         f'<li style="margin-bottom: 8px;"><b>⚖️ Estructura de Capital y Riesgo Sistemático (Beta):</b> {risk_text}</li>'
                         f'<li style="margin-bottom: 0px;"><b>🎯 Perspectiva de Wall Street y Consenso:</b> {target_text}</li>'
+                        f'</ul>'
+                        f'</div>'
+                    )
+
+                elif asset_category == "Crypto":
+                    range_crypto = high_period - low_period if 'high_period' in locals() and 'low_period' in locals() else 0
+                    crypto_diag_text = f"La amplitud de movimiento en el periodo es de ${range_crypto:,.2f}, reflejando la alta beta y sensibilidad característica de las criptomonedas ante noticias macroeconómicas."
+                    html_interpretation = (
+                        f'<div style="background-color: #fff3e0; border-left: 5px solid #ff9800; padding: 18px 20px; border-radius: 8px; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, sans-serif; color: #1a202c; margin-bottom: 20px;">'
+                        f'<div style="font-size: 1.05rem; font-weight: bold; margin-bottom: 12px; color: #e65100;">📝 Diagnóstico Avanzado de Criptomonedas:</div>'
+                        f'<ul style="margin: 0; padding-left: 20px; line-height: 1.6;">'
+                        f'<li style="margin-bottom: 8px;"><b>⚡ Volatilidad y Ciclos de Mercado:</b> Activo altamente líquido negociado 24/7, con fuertes impulsos especulativos y de adopción tecnológica.</li>'
+                        f'<li style="margin-bottom: 0px;"><b>📊 Amplitud de Rango:</b> {crypto_diag_text}</li>'
                         f'</ul>'
                         f'</div>'
                     )
@@ -766,6 +861,7 @@ def render():
                     asset_type_input = st.selectbox(
                         "Tipo de Activo",
                         ["Equity", "Commodity", "Index", "Crypto", "FX"],
+                        index=3 if asset_category == "Crypto" else 0,
                         key="select_asset_type_save",
                     )
                     if st.button(f"💾 Guardar {symbol} en TiDB", key="save_search_asset"):
