@@ -165,7 +165,7 @@ def render():
     con opción de registrar el *snapshot* actual en la base de datos **TiDB Cloud**.
     """)
 
-    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
 
     # -------------------------------------------------------------------------
     # 1. CATEGORÍA COMMODITIES / METALES
