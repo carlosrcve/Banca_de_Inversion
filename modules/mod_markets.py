@@ -138,7 +138,7 @@ def render_live_search_section(symbol, period):
                     increasing_line_color="#26a69a", decreasing_line_color="#ef5350"
                 )])
                 fig.update_layout(xaxis_rangeslider_visible=False, template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10), height=450)
-                st.plotly_chart(fig, use_container_width=True, key=f"chart_{symbol}_{period}")
+                st.plotly_chart(fig, use_container_width=True)
 
                 col_sub1, col_sub2 = st.columns([3, 1])
                 with col_sub1:
