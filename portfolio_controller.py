@@ -236,7 +236,7 @@ class PortfolioController:
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
-                # 1. Insertar el portafolio (la columna real es 'name')
+                # 1. Insertar el portafolio usando la columna real 'name'
                 query_portfolio = text("""
                     INSERT INTO portfolios (name, description)
                     VALUES (:name, :description)
@@ -269,7 +269,7 @@ class PortfolioController:
         except Exception as e:
             traceback.print_exc()
             return False, str(e)
-
+            
     @staticmethod
     def get_portfolios():
         """Obtiene la lista de portafolios mapeando 'name' como 'portfolio_name' para la vista de Streamlit."""
