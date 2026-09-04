@@ -1,7 +1,21 @@
 from datetime import date
 import pandas as pd
 import streamlit as st
+import yfinance as yf
 from portfolio_controller import PortfolioController
+
+@st.cache_data(ttl=600)  # Cacheamos los precios por 10 minutos para no saturar las peticiones
+def get_live_price(ticker: str) -> float:
+    """Obtiene el precio de cierre más reciente para un ticker dado."""
+    try:
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period="1d")
+        if not hist.empty:
+            return float(hist["Close"].iloc[-1])
+        return 0.0
+    except Exception as e:
+        print(f"Error obteniendo precio para {ticker}: {e}")
+        return 0.0
 
 def render():
     st.title("💼 Módulo de Gestión de Portafolio & Persistencia")
@@ -86,17 +100,69 @@ def render():
                 for p in portfolios:
                     with st.expander(f"📁 **{p['portfolio_name']}** (Creado: {p['created_at']})"):
                         st.write(f"**Descripción:** {p['description']}")
-                        assets = PortfolioController.get_portfolio_assets(p["id"])
-                        if assets:
-                            df_assets = pd.DataFrame(assets)
-                            st.dataframe(
-                                df_assets.style.format({
-                                    "quantity": "{:,.2f}",
-                                    "purchase_price": "${:,.2f}",
-                                }),
-                                use_container_width=True,
-                            )
-                        else:
-                            st.info("Este portafolio no contiene activos.")
+                        st.markdown("---")
+                        
+                        # Renderizamos el análisis en tiempo real para este portafolio
+                        render_portfolio_dashboard_inner(p["id"])
             else:
                 st.info("No se encontraron portafolios en TiDB Cloud.")
+
+def render_portfolio_dashboard_inner(portfolio_id: int):
+    """Función interna para calcular y mostrar métricas en tiempo real de un portafolio específico."""
+    assets = PortfolioController.get_portfolio_assets(portfolio_id)
+    
+    if not assets:
+        st.info("Este portafolio no contiene activos registrados.")
+        return
+
+    portfolio_data = []
+    total_investment = 0.0
+    total_current_value = 0.0
+
+    for asset in assets:
+        # Asumiendo que retorna tuplas: (symbol, asset_name, asset_type, quantity, purchase_price, purchase_date)
+        symbol = asset[0]
+        name = asset[1]
+        asset_type = asset[2]
+        quantity = float(asset[3])
+        purchase_price = float(asset[4])
+        
+        # Obtenemos precio actual de mercado vía yfinance
+        current_price = get_live_price(symbol)
+        if current_price == 0.0:
+            current_price = purchase_price  # Fallback si falla la API
+            
+        inv_cost = quantity * purchase_price
+        curr_val = quantity * current_price
+        pnl = curr_val - inv_cost
+        pnl_pct = ((current_price - purchase_price) / purchase_price) * 100 if purchase_price > 0 else 0
+        
+        total_investment += inv_cost
+        total_current_value += curr_val
+        
+        portfolio_data.append({
+            "Símbolo": symbol,
+            "Activo": name,
+            "Tipo": asset_type,
+            "Cant.": quantity,
+            "Precio Compra": f"${purchase_price:,.2f}",
+            "Precio Actual": f"${current_price:,.2f}",
+            "Valor Total": f"${curr_val:,.2f}",
+            "Ganancia/Pérdida ($)": f"${pnl:,.2f}",
+            "Rentabilidad (%)": f"{pnl_pct:+.2f}%"
+        })
+
+    df = pd.DataFrame(portfolio_data)
+    
+    # Métricas generales del portafolio
+    total_pnl = total_current_value - total_investment
+    total_pnl_pct = (total_pnl / total_investment * 100) if total_investment > 0 else 0
+    
+    st.write("📊 **Análisis y Rentabilidad en Tiempo Real**")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Capital Invertido", f"${total_investment:,.2f}")
+    col2.metric("Valor de Mercado", f"${total_current_value:,.2f}")
+    col3.metric("Rendimiento Total", f"${total_pnl:,.2f}", f"{total_pnl_pct:+.2f}%")
+    
+    # Tabla detallada con formato
+    st.dataframe(df, use_container_width=True)

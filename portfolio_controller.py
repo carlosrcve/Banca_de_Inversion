@@ -317,3 +317,20 @@ class PortfolioController:
             if conn:
                 conn.close()
             return []
+
+
+
+
+    @st.cache_data(ttl=600)  # Cacheamos los precios por 10 minutos para no saturar las peticiones
+    def get_live_price(ticker: str) -> float:
+        """Obtiene el precio de cierre más reciente para un ticker dado."""
+        try:
+            stock = yf.Ticker(ticker)
+            # Obtenemos los datos históricos del último día
+            hist = stock.history(period="1d")
+            if not hist.empty:
+                return float(hist["Close"].iloc[-1])
+            return 0.0
+        except Exception as e:
+            print(f"Error obteniendo precio para {ticker}: {e}")
+            return 0.0
