@@ -117,6 +117,10 @@ def render():
 
 def render_portfolio_dashboard_inner(portfolio_id: int):
     """Calcula precios en vivo con yfinance y muestra las métricas y rentabilidad."""
+    
+    # 🚨 PRUEBA DE FUEGO: Si ves este error rojo en la web, el archivo nuevo ya cargó.
+    st.error(f"🔥 SÍ ESTOY ENTRANDO A LA NUEVA FUNCIÓN (ID: {portfolio_id})")
+
     assets = PortfolioController.get_portfolio_assets(portfolio_id)
     
     if not assets:
@@ -137,7 +141,6 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
                 quantity = float(asset.get("quantity", 0.0))
                 purchase_price = float(asset.get("purchase_price", 0.0))
             else:
-                # Si viene como tupla de base de datos (ajusta el índice si varía)
                 symbol = asset[1] if len(asset) > 1 else "NVDA"
                 name = asset[2] if len(asset) > 2 else "N/A"
                 asset_type = asset[3] if len(asset) > 3 else "Equity"
