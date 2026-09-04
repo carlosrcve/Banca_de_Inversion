@@ -97,12 +97,18 @@ def render():
             portfolios = PortfolioController.get_portfolios()
             if portfolios:
                 for p in portfolios:
-                    with st.expander(f"📁 **{p['portfolio_name']}** (Creado: {p['created_at']})"):
-                        st.write(f"**Descripción:** {p['description']}")
+                    # 'p' es un diccionario gracias a DictCursor o el mapeo
+                    p_id = p["id"] if isinstance(p, dict) else p[0]
+                    p_name = p["portfolio_name"] if isinstance(p, dict) else p[1]
+                    p_desc = p["description"] if isinstance(p, dict) else p[2]
+                    p_date = p["created_at"] if isinstance(p, dict) else p[3]
+
+                    with st.expander(f"📁 **{p_name}** (Creado: {p_date})"):
+                        st.write(f"**Descripción:** {p_desc}")
                         st.markdown("---")
                         
-                        # --- LLAMADA A LA FUNCIÓN QUE CALCULA PRECIOS EN VIVO ---
-                        render_portfolio_dashboard_inner(p["id"])
+                        # AQUÍ ESTÁ EL LLAMADO CLAVE QUE PINTA LAS MÉTRICAS Y LA TABLA EN VIVO
+                        render_portfolio_dashboard_inner(p_id)
             else:
                 st.info("No se encontraron portafolios en TiDB Cloud.")
 
