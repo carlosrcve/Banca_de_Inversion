@@ -3,6 +3,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 import yfinance as yf
+import plotly.express as px
 from portfolio_controller import PortfolioController
 
 @st.cache_data(ttl=600)  # Cacheamos los precios por 10 minutos
@@ -116,11 +117,7 @@ def render():
             st.error(f"❌ Error crítico de conexión con TiDB Cloud: {db_error}")
 
 def render_portfolio_dashboard_inner(portfolio_id: int):
-    """Calcula precios en vivo con yfinance y muestra las métricas y rentabilidad."""
-    
-    # 🚨 PRUEBA DE FUEGO: Si ves este error rojo en la web, el archivo nuevo ya cargó.
-    st.error(f"🔥 SÍ ESTOY ENTRANDO A LA NUEVA FUNCIÓN (ID: {portfolio_id})")
-
+    """Calcula precios en vivo con yfinance y muestra métricas ejecutivas y gráficos de Plotly."""
     assets = PortfolioController.get_portfolio_assets(portfolio_id)
     
     if not assets:
@@ -133,7 +130,6 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
 
     for asset in assets:
         try:
-            # Compatibilidad total: soporta tanto diccionarios como filas de tuplas de SQL
             if isinstance(asset, dict):
                 symbol = asset.get("symbol", "NVDA")
                 name = asset.get("asset_name", "N/A")
@@ -168,7 +164,9 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
                 "Precio Actual": f"${current_price:,.2f}",
                 "Valor Total": f"${curr_val:,.2f}",
                 "Ganancia/Pérdida ($)": f"${pnl:,.2f}",
-                "Rentabilidad (%)": f"{pnl_pct:+.2f}%"
+                "Rentabilidad (%)": f"{pnl_pct:+.2f}%",
+                "_val_num": curr_val,
+                "_pnl_pct_num": pnl_pct
             })
         except Exception as e:
             st.error(f"Error procesando activo: {e}")
@@ -185,9 +183,50 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
     st.markdown("---")
     st.write("📊 **Análisis y Rentabilidad en Tiempo Real (Yahoo Finance)**")
     
+    # Tarjetas de Métricas Ejecutivas
     col1, col2, col3 = st.columns(3)
     col1.metric("Capital Invertido", f"${total_investment:,.2f}")
     col2.metric("Valor de Mercado", f"${total_current_value:,.2f}")
     col3.metric("Rendimiento Total", f"${total_pnl:,.2f}", f"{total_pnl_pct:+.2f}%")
     
-    st.dataframe(df, use_container_width=True)
+    st.markdown("---")
+
+    # Gráficos Interactivos con Plotly
+    col_g1, col_g2 = st.columns(2)
+    
+    with col_g1:
+        st.markdown("##### 🥧 Distribución por Clase de Activo")
+        fig_pie = px.pie(
+            df, 
+            names="Tipo", 
+            values="_val_num", 
+            hole=0.4,
+            color_discrete_sequence=px.colors.sequential.Teal
+        )
+        fig_pie.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=280)
+        st.plotly_chart(fig_pie, use_container_width=True)
+        
+    with col_g2:
+        st.markdown("##### 📈 Rentabilidad por Activo (%)")
+        fig_bar = px.bar(
+            df, 
+            x="Símbolo", 
+            y="_pnl_pct_num",
+            text="Rentabilidad (%)",
+            color="_pnl_pct_num",
+            color_continuous_scale=["#ff4b4b", "#00cc96"]
+        )
+        fig_bar.update_layout(
+            margin=dict(t=10, b=10, l=10, r=10), 
+            height=280, 
+            showlegend=False,
+            xaxis_title="",
+            yaxis_title="Rentabilidad %"
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    st.markdown("---")
+    st.markdown("##### 📋 Detalle de Posiciones")
+    # Mostramos la tabla omitiendo las columnas auxiliares internas numéricas
+    display_df = df.drop(columns=["_val_num", "_pnl_pct_num"])
+    st.dataframe(display_df, use_container_width=True)
