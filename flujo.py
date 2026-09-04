@@ -73,7 +73,8 @@ Módulo de Gestión de Portafolio y Riesgo: Análisis de varianza-covarianza, Op
 Módulo de Análisis Geoscatelital/Alternativo: Consultas automáticas a APIs de datos macro, commodities y seguimiento satelital de activos/inventarios.
 
 
-
+https://www.linkedin.com/in/carlos-jose-rodriguez-colmenares-2ab0bb434/
+gylfisoftware@gmail.com
 https://gylfisoftware-bancadeinversion.streamlit.app/
 https://github.com/carlosrcve/Banca_de_Inversion/
 https://share.streamlit.io/
@@ -94,5 +95,19 @@ cd "C:\Users\Carlos Rodriguez\Desktop\Banca_de_Inversion"
 git add dcf_controller.py
 git add portfolio_controller.py
 git add modules/mod_markets.py
-git commit -m "Fix: Unified database credentials handling and SQLAlchemy engine for TiDB Cloud"
+
+git add portfolio_controller.py
+git add modules/mod_portfolio.py
+git commit -m "Fix: Remove key from plotly_chart inside live fragment to allow dynamic updates"
 git push origin main
+
+git add portfolio_controller.py
+git add app.py
+git add modules/mod_portfolio.py
+git commit -m "Fix: Remove key from plotly_chart inside live fragment to allow dynamic updates"
+git push origin main
+
+
+
+gylfisoftware@gmail.com
+Ca22021956*

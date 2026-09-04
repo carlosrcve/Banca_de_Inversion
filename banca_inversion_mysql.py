@@ -240,9 +240,10 @@ CREATE TABLE IF NOT EXISTS market_quotes (
 
 
 
--- 1. Tabla principal de Portafolios
+
+-- 2. Creamos las tablas limpias con tu estructura exacta
 USE valuations_db;
-CREATE TABLE IF NOT EXISTS portfolios (
+CREATE TABLE portfolios (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
     description TEXT,
@@ -250,14 +251,13 @@ CREATE TABLE IF NOT EXISTS portfolios (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2. Tabla de Activos pertenecientes a cada Portafolio
 USE valuations_db;
-CREATE TABLE IF NOT EXISTS portfolio_assets (
+CREATE TABLE portfolio_assets (
     id INT AUTO_INCREMENT PRIMARY KEY,
     portfolio_id INT NOT NULL,
     ticker VARCHAR(20) NOT NULL,
     asset_name VARCHAR(150) NOT NULL,
-    asset_class VARCHAR(50) NOT NULL, -- Ej: Equity, Crypto, Commodity
+    asset_class VARCHAR(50) NOT NULL,
     quantity DECIMAL(18, 6) NOT NULL,
     purchase_price DECIMAL(18, 4) NOT NULL,
     acquisition_date DATE NOT NULL,
