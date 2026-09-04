@@ -107,7 +107,7 @@ def render():
                 st.info("No se encontraron portafolios en TiDB Cloud.")
 
 def render_portfolio_dashboard_inner(portfolio_id: int):
-    """Función interna corregida para leer diccionarios (DictCursor) y calcular métricas en tiempo real."""
+    """Calcula precios en vivo con yfinance y muestra las métricas y rentabilidad."""
     assets = PortfolioController.get_portfolio_assets(portfolio_id)
     
     if not assets:
@@ -119,14 +119,13 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
     total_current_value = 0.0
 
     for asset in assets:
-        # CORREGIDO: Leemos usando las llaves del diccionario que retorna DictCursor
         symbol = asset["symbol"]
         name = asset["asset_name"]
         asset_type = asset["asset_type"]
         quantity = float(asset["quantity"])
         purchase_price = float(asset["purchase_price"])
         
-        # Obtenemos precio actual de mercado vía yfinance
+        # Obtenemos precio actual en vivo desde Yahoo Finance
         current_price = get_live_price(symbol)
         if current_price == 0.0:
             current_price = purchase_price  # Fallback si falla la API
@@ -163,5 +162,5 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
     col2.metric("Valor de Mercado", f"${total_current_value:,.2f}")
     col3.metric("Rendimiento Total", f"${total_pnl:,.2f}", f"{total_pnl_pct:+.2f}%")
     
-    # Tabla detallada con formato
+    # Tabla detallada con los campos formateados y en vivo
     st.dataframe(df, use_container_width=True)
