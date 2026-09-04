@@ -1,4 +1,5 @@
 # modules/mod_portofolio.py
+# modules/mod_portofolio.py
 from datetime import date
 import pandas as pd
 import streamlit as st
@@ -93,35 +94,35 @@ def render():
 
     with tab2:
         st.subheader("Consultar Portafolios Almacenados")
-        if st.button("🔄 Cargar Lista de Portafolios", key="btn_load_portfolios"):
-            portfolios = PortfolioController.get_portfolios()
-            if portfolios:
-                for p in portfolios:
-                    # Extraemos los datos del diccionario de forma segura
-                    p_id = p["id"] if isinstance(p, dict) else p[0]
-                    p_name = p["portfolio_name"] if isinstance(p, dict) else p[1]
-                    p_desc = p["description"] if isinstance(p, dict) else p[2]
-                    p_date = p["created_at"] if isinstance(p, dict) else p[3]
+        
+        # Corrección estructural: Cargamos los portafolios directamente al abrir la pestaña 
+        # o usando un toggle persistente en session_state, evitando que el botón apague la vista.
+        portfolios = PortfolioController.get_portfolios()
+        
+        if portfolios:
+            st.success(f"Se encontraron {len(portfolios)} portafolios en TiDB Cloud.")
+            for p in portfolios:
+                p_id = p["id"] if isinstance(p, dict) else p[0]
+                p_name = p["portfolio_name"] if isinstance(p, dict) else p[1]
+                p_desc = p["description"] if isinstance(p, dict) else p[2]
+                p_date = p["created_at"] if isinstance(p, dict) else p[3]
 
-                    with st.expander(f"📁 **{p_name}** (Creado: {p_date})"):
-                        st.write(f"**Descripción:** {p_desc}")
-                        st.markdown("---")
-                        
-                        # --- LLAMADA AL DASHBOARD EN VIVO ---
-                        render_portfolio_dashboard_inner(p_id)
-            else:
-                st.info("No se encontraron portafolios en TiDB Cloud.")
+                with st.expander(f"📁 **{p_name}** (Creado: {p_date})"):
+                    st.write(f"**Descripción:** {p_desc}")
+                    st.markdown("---")
+                    
+                    # --- LLAMADA AL DASHBOARD EN VIVO ---
+                    render_portfolio_dashboard_inner(p_id)
+        else:
+            st.info("No se encontraron portafolios registrados en TiDB Cloud.")
 
 
 def render_portfolio_dashboard_inner(portfolio_id: int):
     """Calcula precios en vivo con yfinance y muestra las métricas y rentabilidad."""
-    st.write(f"DEBUG: Entró a renderizar el portafolio ID -> {portfolio_id}")
-    
     assets = PortfolioController.get_portfolio_assets(portfolio_id)
-    st.write(f"DEBUG: Activos obtenidos de la BD: {assets}")
     
     if not assets:
-        st.warning(f"⚠️ El controlador no devolvió activos para el portafolio ID {portfolio_id}. Revisa la consulta SQL.")
+        st.warning(f"⚠️ El controlador no devolvió activos para el portafolio ID {portfolio_id}.")
         return
 
     portfolio_data = []
@@ -136,10 +137,9 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
             quantity = float(asset["quantity"])
             purchase_price = float(asset["purchase_price"])
             
-            # Obtenemos precio actual en vivo desde Yahoo Finance
             current_price = get_live_price(symbol)
             if current_price == 0.0:
-                current_price = purchase_price  # Fallback si falla la API
+                current_price = purchase_price  
                 
             inv_cost = quantity * purchase_price
             curr_val = quantity * current_price
@@ -169,7 +169,6 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
 
     df = pd.DataFrame(portfolio_data)
     
-    # Métricas generales del portafolio
     total_pnl = total_current_value - total_investment
     total_pnl_pct = (total_pnl / total_investment * 100) if total_investment > 0 else 0
     
@@ -179,5 +178,4 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
     col2.metric("Valor de Mercado", f"${total_current_value:,.2f}")
     col3.metric("Rendimiento Total", f"${total_pnl:,.2f}", f"{total_pnl_pct:+.2f}%")
     
-    # Tabla detallada con los campos formateados y en vivo
     st.dataframe(df, use_container_width=True)
