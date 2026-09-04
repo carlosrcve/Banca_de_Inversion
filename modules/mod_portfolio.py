@@ -95,26 +95,29 @@ def render():
     with tab2:
         st.subheader("Consultar Portafolios Almacenados")
         
-        # Corrección estructural: Cargamos los portafolios directamente al abrir la pestaña 
-        # o usando un toggle persistente en session_state, evitando que el botón apague la vista.
-        portfolios = PortfolioController.get_portfolios()
-        
-        if portfolios:
-            st.success(f"Se encontraron {len(portfolios)} portafolios en TiDB Cloud.")
-            for p in portfolios:
-                p_id = p["id"] if isinstance(p, dict) else p[0]
-                p_name = p["portfolio_name"] if isinstance(p, dict) else p[1]
-                p_desc = p["description"] if isinstance(p, dict) else p[2]
-                p_date = p["created_at"] if isinstance(p, dict) else p[3]
+        try:
+            # Intentamos traer los portafolios de forma segura
+            portfolios = PortfolioController.get_portfolios()
+            
+            if portfolios:
+                st.success(f"Se encontraron {len(portfolios)} portafolios en TiDB Cloud.")
+                for p in portfolios:
+                    p_id = p["id"] if isinstance(p, dict) else p[0]
+                    p_name = p["portfolio_name"] if isinstance(p, dict) else p[1]
+                    p_desc = p["description"] if isinstance(p, dict) else p[2]
+                    p_date = p["created_at"] if isinstance(p, dict) else p[3]
 
-                with st.expander(f"📁 **{p_name}** (Creado: {p_date})"):
-                    st.write(f"**Descripción:** {p_desc}")
-                    st.markdown("---")
-                    
-                    # --- LLAMADA AL DASHBOARD EN VIVO ---
-                    render_portfolio_dashboard_inner(p_id)
-        else:
-            st.info("No se encontraron portafolios registrados en TiDB Cloud.")
+                    with st.expander(f"📁 **{p_name}** (Creado: {p_date})"):
+                        st.write(f"**Descripción:** {p_desc}")
+                        st.markdown("---")
+                        
+                        # --- LLAMADA AL DASHBOARD EN VIVO ---
+                        render_portfolio_dashboard_inner(p_id)
+            else:
+                st.info("No se encontraron portafolios registrados en TiDB Cloud.")
+                
+        except Exception as db_error:
+            st.error(f"❌ Error crítico de conexión con TiDB Cloud: {db_error}")
 
 
 def render_portfolio_dashboard_inner(portfolio_id: int):
