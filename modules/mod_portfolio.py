@@ -220,6 +220,7 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
             margin=dict(t=10, b=10, l=10, r=10), 
             height=280, 
             showlegend=False,
+            coloraxis_showscale=False,  # Oculta la barra de escala de colores lateral
             xaxis_title="",
             yaxis_title="Rentabilidad %"
         )
@@ -227,6 +228,5 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
 
     st.markdown("---")
     st.markdown("##### 📋 Detalle de Posiciones")
-    # Mostramos la tabla omitiendo las columnas auxiliares internas numéricas
     display_df = df.drop(columns=["_val_num", "_pnl_pct_num"])
     st.dataframe(display_df, use_container_width=True)
