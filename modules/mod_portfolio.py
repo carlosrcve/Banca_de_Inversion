@@ -112,6 +112,7 @@ def render():
             else:
                 st.info("No se encontraron portafolios en TiDB Cloud.")
 
+
 def render_portfolio_dashboard_inner(portfolio_id: int):
     """Calcula precios en vivo con yfinance y muestra las métricas y rentabilidad."""
     assets = PortfolioController.get_portfolio_assets(portfolio_id)
