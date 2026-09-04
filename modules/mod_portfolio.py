@@ -1,5 +1,4 @@
 # modules/mod_portofolio.py
-# modules/mod_portofolio.py
 from datetime import date
 import pandas as pd
 import streamlit as st
@@ -96,7 +95,6 @@ def render():
         st.subheader("Consultar Portafolios Almacenados")
         
         try:
-            # Intentamos traer los portafolios de forma segura
             portfolios = PortfolioController.get_portfolios()
             
             if portfolios:
@@ -110,15 +108,12 @@ def render():
                     with st.expander(f"📁 **{p_name}** (Creado: {p_date})"):
                         st.write(f"**Descripción:** {p_desc}")
                         st.markdown("---")
-                        
-                        # --- LLAMADA AL DASHBOARD EN VIVO ---
                         render_portfolio_dashboard_inner(p_id)
             else:
                 st.info("No se encontraron portafolios registrados en TiDB Cloud.")
                 
         except Exception as db_error:
             st.error(f"❌ Error crítico de conexión con TiDB Cloud: {db_error}")
-
 
 def render_portfolio_dashboard_inner(portfolio_id: int):
     """Calcula precios en vivo con yfinance y muestra las métricas y rentabilidad."""
