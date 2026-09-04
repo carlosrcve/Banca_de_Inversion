@@ -97,7 +97,7 @@ def render():
             portfolios = PortfolioController.get_portfolios()
             if portfolios:
                 for p in portfolios:
-                    # 'p' es un diccionario gracias a DictCursor o el mapeo
+                    # Extraemos los datos del diccionario de forma segura
                     p_id = p["id"] if isinstance(p, dict) else p[0]
                     p_name = p["portfolio_name"] if isinstance(p, dict) else p[1]
                     p_desc = p["description"] if isinstance(p, dict) else p[2]
@@ -107,7 +107,7 @@ def render():
                         st.write(f"**Descripción:** {p_desc}")
                         st.markdown("---")
                         
-                        # AQUÍ ESTÁ EL LLAMADO CLAVE QUE PINTA LAS MÉTRICAS Y LA TABLA EN VIVO
+                        # --- LLAMADA AL DASHBOARD EN VIVO ---
                         render_portfolio_dashboard_inner(p_id)
             else:
                 st.info("No se encontraron portafolios en TiDB Cloud.")
