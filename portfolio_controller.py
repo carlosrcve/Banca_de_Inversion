@@ -147,7 +147,10 @@ class PortfolioController:
 import os
 import sys
 import ssl
+import traceback
 import pymysql
+import streamlit as st
+import yfinance as yf
 from sqlalchemy import create_engine, text
 
 # Garantiza que el directorio raíz esté en el path de ejecución
@@ -182,6 +185,21 @@ def get_secure_db_connection():
     except Exception as e:
         print(f"🔥 Error conectando a TiDB con SSL: {e}")
         return None
+
+
+@st.cache_data(ttl=600)  # Cacheamos los precios por 10 minutos para no saturar las peticiones
+def get_live_price(ticker: str) -> float:
+    """Obtiene el precio de cierre más reciente para un ticker dado."""
+    try:
+        stock = yf.Ticker(ticker)
+        # Obtenemos los datos históricos del último día
+        hist = stock.history(period="1d")
+        if not hist.empty:
+            return float(hist["Close"].iloc[-1])
+        return 0.0
+    except Exception as e:
+        print(f"Error obteniendo precio para {ticker}: {e}")
+        return 0.0
 
 
 class PortfolioController:
@@ -232,7 +250,6 @@ class PortfolioController:
         portfolio_name: str, description: str, assets: list
     ) -> tuple[bool, str | None]:
         """Crea un portafolio y sus activos usando exactamente los nombres reales de la BD."""
-        import traceback
         try:
             engine = get_sqlalchemy_engine()
             with engine.begin() as conn:
@@ -317,20 +334,3 @@ class PortfolioController:
             if conn:
                 conn.close()
             return []
-
-
-
-
-    @st.cache_data(ttl=600)  # Cacheamos los precios por 10 minutos para no saturar las peticiones
-    def get_live_price(ticker: str) -> float:
-        """Obtiene el precio de cierre más reciente para un ticker dado."""
-        try:
-            stock = yf.Ticker(ticker)
-            # Obtenemos los datos históricos del último día
-            hist = stock.history(period="1d")
-            if not hist.empty:
-                return float(hist["Close"].iloc[-1])
-            return 0.0
-        except Exception as e:
-            print(f"Error obteniendo precio para {ticker}: {e}")
-            return 0.0
