@@ -5,7 +5,7 @@ import streamlit as st
 import yfinance as yf
 from portfolio_controller import PortfolioController
 
-@st.cache_data(ttl=600)  # Cacheamos los precios por 10 minutos para no saturar las peticiones
+@st.cache_data(ttl=600)  # Cacheamos los precios por 10 minutos
 def get_live_price(ticker: str) -> float:
     """Obtiene el precio de cierre más reciente para un ticker dado."""
     try:
@@ -101,7 +101,7 @@ def render():
                         st.write(f"**Descripción:** {p['description']}")
                         st.markdown("---")
                         
-                        # Llamamos a la función interna pasando el id del portafolio
+                        # LLAMADA OBLIGATORIA A LA FUNCIÓN DE RENDERIZADO EN VIVO
                         render_portfolio_dashboard_inner(p["id"])
             else:
                 st.info("No se encontraron portafolios en TiDB Cloud.")
