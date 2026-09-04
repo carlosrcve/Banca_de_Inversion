@@ -115,10 +115,13 @@ def render():
 
 def render_portfolio_dashboard_inner(portfolio_id: int):
     """Calcula precios en vivo con yfinance y muestra las métricas y rentabilidad."""
+    st.write(f"DEBUG: Entró a renderizar el portafolio ID -> {portfolio_id}")
+    
     assets = PortfolioController.get_portfolio_assets(portfolio_id)
+    st.write(f"DEBUG: Activos obtenidos de la BD: {assets}")
     
     if not assets:
-        st.info("Este portafolio no contiene activos registrados.")
+        st.warning(f"⚠️ El controlador no devolvió activos para el portafolio ID {portfolio_id}. Revisa la consulta SQL.")
         return
 
     portfolio_data = []
@@ -126,36 +129,43 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
     total_current_value = 0.0
 
     for asset in assets:
-        symbol = asset["symbol"]
-        name = asset["asset_name"]
-        asset_type = asset["asset_type"]
-        quantity = float(asset["quantity"])
-        purchase_price = float(asset["purchase_price"])
-        
-        # Obtenemos precio actual en vivo desde Yahoo Finance
-        current_price = get_live_price(symbol)
-        if current_price == 0.0:
-            current_price = purchase_price  # Fallback si falla la API
+        try:
+            symbol = asset["symbol"]
+            name = asset["asset_name"]
+            asset_type = asset["asset_type"]
+            quantity = float(asset["quantity"])
+            purchase_price = float(asset["purchase_price"])
             
-        inv_cost = quantity * purchase_price
-        curr_val = quantity * current_price
-        pnl = curr_val - inv_cost
-        pnl_pct = ((current_price - purchase_price) / purchase_price) * 100 if purchase_price > 0 else 0
-        
-        total_investment += inv_cost
-        total_current_value += curr_val
-        
-        portfolio_data.append({
-            "Símbolo": symbol,
-            "Activo": name,
-            "Tipo": asset_type,
-            "Cant.": quantity,
-            "Precio Compra": f"${purchase_price:,.2f}",
-            "Precio Actual": f"${current_price:,.2f}",
-            "Valor Total": f"${curr_val:,.2f}",
-            "Ganancia/Pérdida ($)": f"${pnl:,.2f}",
-            "Rentabilidad (%)": f"{pnl_pct:+.2f}%"
-        })
+            # Obtenemos precio actual en vivo desde Yahoo Finance
+            current_price = get_live_price(symbol)
+            if current_price == 0.0:
+                current_price = purchase_price  # Fallback si falla la API
+                
+            inv_cost = quantity * purchase_price
+            curr_val = quantity * current_price
+            pnl = curr_val - inv_cost
+            pnl_pct = ((current_price - purchase_price) / purchase_price) * 100 if purchase_price > 0 else 0
+            
+            total_investment += inv_cost
+            total_current_value += curr_val
+            
+            portfolio_data.append({
+                "Símbolo": symbol,
+                "Activo": name,
+                "Tipo": asset_type,
+                "Cant.": quantity,
+                "Precio Compra": f"${purchase_price:,.2f}",
+                "Precio Actual": f"${current_price:,.2f}",
+                "Valor Total": f"${curr_val:,.2f}",
+                "Ganancia/Pérdida ($)": f"${pnl:,.2f}",
+                "Rentabilidad (%)": f"{pnl_pct:+.2f}%"
+            })
+        except Exception as e:
+            st.error(f"Error procesando el activo {asset}: {e}")
+
+    if not portfolio_data:
+        st.error("No se pudo construir la lista de datos del portafolio.")
+        return
 
     df = pd.DataFrame(portfolio_data)
     
