@@ -101,7 +101,7 @@ def render():
                         st.write(f"**Descripción:** {p['description']}")
                         st.markdown("---")
                         
-                        # LLAMADA OBLIGATORIA A LA FUNCIÓN DE RENDERIZADO EN VIVO
+                        # --- LLAMADA A LA FUNCIÓN QUE CALCULA PRECIOS EN VIVO ---
                         render_portfolio_dashboard_inner(p["id"])
             else:
                 st.info("No se encontraron portafolios en TiDB Cloud.")
