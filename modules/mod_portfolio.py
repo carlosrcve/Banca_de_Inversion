@@ -120,7 +120,7 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
     assets = PortfolioController.get_portfolio_assets(portfolio_id)
     
     if not assets:
-        st.warning(f"⚠️ El controlador no devolvió activos para el portafolio ID {portfolio_id}.")
+        st.warning(f"⚠️ No hay activos registrados para este portafolio (ID: {portfolio_id}).")
         return
 
     portfolio_data = []
@@ -129,11 +129,20 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
 
     for asset in assets:
         try:
-            symbol = asset["symbol"]
-            name = asset["asset_name"]
-            asset_type = asset["asset_type"]
-            quantity = float(asset["quantity"])
-            purchase_price = float(asset["purchase_price"])
+            # Compatibilidad total: soporta tanto diccionarios como filas de tuplas de SQL
+            if isinstance(asset, dict):
+                symbol = asset.get("symbol", "NVDA")
+                name = asset.get("asset_name", "N/A")
+                asset_type = asset.get("asset_type", "Equity")
+                quantity = float(asset.get("quantity", 0.0))
+                purchase_price = float(asset.get("purchase_price", 0.0))
+            else:
+                # Si viene como tupla de base de datos (ajusta el índice si varía)
+                symbol = asset[1] if len(asset) > 1 else "NVDA"
+                name = asset[2] if len(asset) > 2 else "N/A"
+                asset_type = asset[3] if len(asset) > 3 else "Equity"
+                quantity = float(asset[4]) if len(asset) > 4 else 0.0
+                purchase_price = float(asset[5]) if len(asset) > 5 else 0.0
             
             current_price = get_live_price(symbol)
             if current_price == 0.0:
@@ -159,10 +168,10 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
                 "Rentabilidad (%)": f"{pnl_pct:+.2f}%"
             })
         except Exception as e:
-            st.error(f"Error procesando el activo {asset}: {e}")
+            st.error(f"Error procesando activo: {e}")
 
     if not portfolio_data:
-        st.error("No se pudo construir la lista de datos del portafolio.")
+        st.error("No se pudo construir la tabla de rentabilidad.")
         return
 
     df = pd.DataFrame(portfolio_data)
@@ -170,7 +179,9 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
     total_pnl = total_current_value - total_investment
     total_pnl_pct = (total_pnl / total_investment * 100) if total_investment > 0 else 0
     
-    st.write("📊 **Análisis y Rentabilidad en Tiempo Real**")
+    st.markdown("---")
+    st.write("📊 **Análisis y Rentabilidad en Tiempo Real (Yahoo Finance)**")
+    
     col1, col2, col3 = st.columns(3)
     col1.metric("Capital Invertido", f"${total_investment:,.2f}")
     col2.metric("Valor de Mercado", f"${total_current_value:,.2f}")

@@ -104,7 +104,8 @@ git push origin main
 git add portfolio_controller.py
 git add app.py
 git add modules/mod_portfolio.py
-git commit -m "Fix: Remove key from plotly_chart inside live fragment to allow dynamic updates"
+git add .
+git commit -m "Fix: Actualización de módulos de portafolio y base de datos"
 git push origin main
 
 
