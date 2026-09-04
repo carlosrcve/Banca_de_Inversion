@@ -1,3 +1,4 @@
+# modules/mod_portofolio.py
 from datetime import date
 import pandas as pd
 import streamlit as st
@@ -37,7 +38,6 @@ def render():
         if "temp_assets" not in st.session_state:
             st.session_state.temp_assets = []
 
-        # Usamos un formulario para la entrada del activo para evitar recargas indeseadas de Streamlit
         with st.form("form_add_asset", clear_on_submit=True):
             col_a1, col_a2, col_a3, col_a4, col_a5 = st.columns(5)
             with col_a1:
@@ -65,7 +65,6 @@ def render():
                 })
                 st.success(f"Activo '{a_sym}' agregado a la vista previa.")
 
-        # Vista previa y botón final de guardado en la base de datos
         if st.session_state.temp_assets:
             st.markdown("---")
             st.write("##### 📋 Vista Previa de Activos a Guardar:")
@@ -102,13 +101,13 @@ def render():
                         st.write(f"**Descripción:** {p['description']}")
                         st.markdown("---")
                         
-                        # Renderizamos el análisis en tiempo real para este portafolio
+                        # Llamamos a la función interna pasando el id del portafolio
                         render_portfolio_dashboard_inner(p["id"])
             else:
                 st.info("No se encontraron portafolios en TiDB Cloud.")
 
 def render_portfolio_dashboard_inner(portfolio_id: int):
-    """Función interna para calcular y mostrar métricas en tiempo real de un portafolio específico."""
+    """Función interna corregida para leer diccionarios (DictCursor) y calcular métricas en tiempo real."""
     assets = PortfolioController.get_portfolio_assets(portfolio_id)
     
     if not assets:
@@ -120,12 +119,12 @@ def render_portfolio_dashboard_inner(portfolio_id: int):
     total_current_value = 0.0
 
     for asset in assets:
-        # Asumiendo que retorna tuplas: (symbol, asset_name, asset_type, quantity, purchase_price, purchase_date)
-        symbol = asset[0]
-        name = asset[1]
-        asset_type = asset[2]
-        quantity = float(asset[3])
-        purchase_price = float(asset[4])
+        # CORREGIDO: Leemos usando las llaves del diccionario que retorna DictCursor
+        symbol = asset["symbol"]
+        name = asset["asset_name"]
+        asset_type = asset["asset_type"]
+        quantity = float(asset["quantity"])
+        purchase_price = float(asset["purchase_price"])
         
         # Obtenemos precio actual de mercado vía yfinance
         current_price = get_live_price(symbol)
