@@ -289,48 +289,44 @@ class PortfolioController:
             
     @staticmethod
     def get_portfolios():
-        """Obtiene la lista de portafolios mapeando 'name' como 'portfolio_name' para la vista de Streamlit."""
+        """Obtiene la lista de portafolios mapeando 'name' como 'portfolio_name'."""
         conn = get_secure_db_connection()
         if not conn:
             return []
-
         try:
-            cursor = conn.cursor()
-            # Seleccionamos 'name AS portfolio_name' para que encaje perfecto con el render de Streamlit
-            query = "SELECT id, name AS portfolio_name, description, created_at FROM portfolios ORDER BY id DESC"
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            cursor.close()
-            conn.close()
-            return rows
+            with conn.cursor() as cursor:
+                query = "SELECT id, name AS portfolio_name, description, created_at FROM portfolios ORDER BY id DESC"
+                cursor.execute(query)
+                return cursor.fetchall()
         except Exception as e:
             print(f"Error al consultar portafolios: {e}")
-            if conn:
-                conn.close()
             return []
+        finally:
+            conn.close()
 
     @staticmethod
     def get_portfolio_assets(portfolio_id: int):
-        """Obtiene los activos y los mapea a los nombres que espera el DataFrame de Streamlit."""
+        """Obtiene los activos mapeando las columnas reales a los nombres que espera el dashboard en vivo."""
         conn = get_secure_db_connection()
         if not conn:
             return []
-
         try:
-            cursor = conn.cursor()
-            # Mapeamos 'ticker AS symbol' y 'asset_class AS asset_type' para mantener compatibilidad total con el render
-            query = """
-                SELECT ticker AS symbol, asset_name, asset_class AS asset_type, quantity, purchase_price, acquisition_date AS purchase_date 
-                FROM portfolio_assets 
-                WHERE portfolio_id = %s
-            """
-            cursor.execute(query, (portfolio_id,))
-            rows = cursor.fetchall()
-            cursor.close()
-            conn.close()
-            return rows
+            with conn.cursor() as cursor:
+                query = """
+                    SELECT 
+                        ticker AS symbol, 
+                        asset_name, 
+                        asset_class AS asset_type, 
+                        quantity, 
+                        purchase_price, 
+                        acquisition_date AS purchase_date 
+                    FROM portfolio_assets 
+                    WHERE portfolio_id = %s
+                """
+                cursor.execute(query, (portfolio_id,))
+                return cursor.fetchall()
         except Exception as e:
             print(f"Error al consultar activos del portafolio: {e}")
-            if conn:
-                conn.close()
             return []
+        finally:
+            conn.close()
