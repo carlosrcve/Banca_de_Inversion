@@ -5,7 +5,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
-from modules import mod_dcf, mod_markets, mod_portfolio, mod_wealth, mod_dealroom
+from modules import mod_dcf, mod_markets, mod_portfolio, mod_wealth, mod_dealroom, mod_asset_mgmt
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -42,6 +42,7 @@ module = st.sidebar.radio(
         "💼 Gestión de Portafolio",
         "🌐 Gestión Global de Patrimonio",
         "🏛️ M&A & Deal Room",
+        "📈 Asset Management & Fondos",
     ],
 )
 
@@ -62,3 +63,6 @@ elif module == "🌐 Gestión Global de Patrimonio":
 
 elif module == "🏛️ M&A & Deal Room":
     mod_dealroom.render()
+
+elif module == "📈 Asset Management & Fondos":
+    mod_asset_mgmt.render()
