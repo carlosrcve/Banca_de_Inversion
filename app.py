@@ -5,7 +5,6 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
-import modules.mod_asset_mgmt as mod_asset_mgmt
 import modules.mod_dcf as mod_dcf
 import modules.mod_dealroom as mod_dealroom
 import modules.mod_markets as mod_markets
@@ -68,6 +67,3 @@ elif module == "🌐 Gestión Global de Patrimonio":
 
 elif module == "🏛️ M&A & Deal Room":
     mod_dealroom.render()
-
-elif module == "📈 Asset Management & Fondos":
-    mod_asset_mgmt.render()
