@@ -10,6 +10,7 @@ import modules.mod_dealroom as mod_dealroom
 import modules.mod_markets as mod_markets
 import modules.mod_portfolio as mod_portfolio
 import modules.mod_wealth as mod_wealth
+import modules.mod_asset_mgmt as mod_asset_mgmt
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -67,3 +68,6 @@ elif module == "🌐 Gestión Global de Patrimonio":
 
 elif module == "🏛️ M&A & Deal Room":
     mod_dealroom.render()
+
+elif module == "📈 Asset Management & Fondos":
+    mod_asset_mgmt.render()
