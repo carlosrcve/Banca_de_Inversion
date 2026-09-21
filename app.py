@@ -5,14 +5,12 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
-from modules import (
-    mod_asset_mgmt,
-    mod_dcf,
-    mod_dealroom,
-    mod_markets,
-    mod_portfolio,
-    mod_wealth,
-)
+import modules.mod_asset_mgmt as mod_asset_mgmt
+import modules.mod_dcf as mod_dcf
+import modules.mod_dealroom as mod_dealroom
+import modules.mod_markets as mod_markets
+import modules.mod_portfolio as mod_portfolio
+import modules.mod_wealth as mod_wealth
 
 # Configuración inicial de la página
 st.set_page_config(
