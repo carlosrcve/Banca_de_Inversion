@@ -11,7 +11,7 @@ from modules import (
     mod_portfolio,
     mod_wealth,
     mod_dealroom,
-    mod_asset_mgmt,  # <--- Añade esta importación
+    mod_asset_mgmt  # <--- Añade esta importación
 )
 
 # Configuración inicial de la página
