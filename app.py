@@ -4,13 +4,15 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-import streamlit as st
-import modules.mod_asset_mgmt as mod_asset_mgmt
-import modules.mod_dcf as mod_dcf
-import modules.mod_dealroom as mod_dealroom
-import modules.mod_markets as mod_markets
-import modules.mod_portfolio as mod_portfolio
-import modules.mod_wealth as mod_wealth
+# En tu app.py:
+from modules import (
+    mod_dcf,
+    mod_markets,
+    mod_portfolio,
+    mod_wealth,
+    mod_dealroom,
+    mod_asset_mgmt,  # <--- Añade esta importación
+)
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -69,5 +71,5 @@ elif module == "🌐 Gestión Global de Patrimonio":
 elif module == "🏛️ M&A & Deal Room":
     mod_dealroom.render()
 
-elif module == "📈 Asset Management & Fund Portfolios":
+elif module == "💼 Asset Management & Riesgo":
     mod_asset_mgmt.render()
