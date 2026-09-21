@@ -1,3 +1,4 @@
+# mod_wealth.py
 # Contenido mejorado para tu archivo modules/Gestión_Global_de_Patrimonio.py
 import numpy as np
 import pandas as pd

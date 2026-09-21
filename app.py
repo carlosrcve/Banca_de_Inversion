@@ -5,7 +5,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
-from modules import mod_dcf, mod_markets, mod_portfolio, mod_wealth
+from modules import mod_dcf, mod_markets, mod_portfolio, mod_wealth, mod_dealroom
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -41,6 +41,7 @@ module = st.sidebar.radio(
         "📈 Mercados & Clases de Activos",
         "💼 Gestión de Portafolio",
         "🌐 Gestión Global de Patrimonio",
+        "🏛️ M&A & Deal Room",
     ],
 )
 
@@ -58,3 +59,6 @@ elif module == "💼 Gestión de Portafolio":
 
 elif module == "🌐 Gestión Global de Patrimonio":
     mod_wealth.render()  # Asegúrate de que tu función en mod_wealth.py se llame render() o render_wealth_management_ui()
+
+elif module == "🏛️ M&A & Deal Room":
+    mod_dealroom.render()
