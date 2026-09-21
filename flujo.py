@@ -82,7 +82,7 @@ cd "C:\Users\Carlos Rodriguez\Desktop\Banca_de_Inversion"
 
 
 git add app.py
-git commit -m "Feat: Add Excel upload functionality to DCF valuation module"
+git commit -m "Feat: Cumplimiento, KYC & AML"
 git push origin main
 
 

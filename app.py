@@ -20,7 +20,8 @@ from modules import (
     mod_portfolio,
     mod_wealth,
     mod_dealroom,
-    mod_asset_mgmt
+    mod_asset_mgmt,
+    mod_compliance  # <--- Nuevo Módulo de Cumplimiento y AML
 )
 
 # Cadena de conexión por defecto a TiDB Cloud
@@ -48,6 +49,8 @@ module = st.sidebar.radio(
         "🌐 Gestión Global de Patrimonio",
         "🏛️ M&A & Deal Room",
         "📈 Asset Management & Fondos",
+        "🛡️ Cumplimiento, KYC & AML",  # <--- Nueva Opción
+
     ],
 )
 
@@ -65,3 +68,5 @@ elif module == "🏛️ M&A & Deal Room":
     mod_dealroom.render()
 elif module == "📈 Asset Management & Fondos":
     mod_asset_mgmt.render()
+elif module == "🛡️ Cumplimiento, KYC & AML":
+    mod_compliance.render()  # <--- Renderizado del nuevo módulo
