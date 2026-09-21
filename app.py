@@ -5,7 +5,14 @@ import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
-from modules import mod_dcf, mod_markets, mod_portfolio, mod_wealth, mod_dealroom, mod_asset_mgmt
+from modules import (
+    mod_asset_mgmt,
+    mod_dcf,
+    mod_dealroom,
+    mod_markets,
+    mod_portfolio,
+    mod_wealth,
+)
 
 # Configuración inicial de la página
 st.set_page_config(
@@ -33,7 +40,7 @@ if st.session_state.db_url:
 else:
     st.sidebar.caption("🔴 DB no configurada")
 
-# Menú de Navegación Lateral con su icono distintivo 🌐
+# Menú de Navegación Lateral
 module = st.sidebar.radio(
     "Navegación / Módulos",
     [
@@ -59,7 +66,7 @@ elif module == "💼 Gestión de Portafolio":
     mod_portfolio.render()
 
 elif module == "🌐 Gestión Global de Patrimonio":
-    mod_wealth.render()  # Asegúrate de que tu función en mod_wealth.py se llame render() o render_wealth_management_ui()
+    mod_wealth.render()
 
 elif module == "🏛️ M&A & Deal Room":
     mod_dealroom.render()
