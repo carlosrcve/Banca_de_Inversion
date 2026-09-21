@@ -126,3 +126,9 @@ Mercados & Clases de Activos: Para consultar el comportamiento de diferentes tip
 Otras automatizaciones: Como las integraciones con bots de notificación o los cálculos fiscales y contables que sueles manejar.
 
 ¿Te referías a alguno de estos módulos o estabas pensando en otra función o característica nueva para agregarle al sistema? ¡Dime y lo retomamos al instante!
+
+
+
+git add .
+git commit -m "feat: agregar modulo mod_wealth.py para gestion de patrimonio"
+git push origin main
