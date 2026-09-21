@@ -1,20 +1,9 @@
 # app.py
+import streamlit as st
 import os
 import sys
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-# En tu app.py:
-from modules import (
-    mod_dcf,
-    mod_markets,
-    mod_portfolio,
-    mod_wealth,
-    mod_dealroom,
-    mod_asset_mgmt  # <--- Añade esta importación
-)
-
-# Configuración inicial de la página
+# 1. Configuración de la página (DEBE SER LO PRIMERO DE STREAMLIT)
 st.set_page_config(
     page_title="Gylfi Software - Banca de Inversión",
     page_icon="🏦",
@@ -22,10 +11,21 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# 2. Importación de módulos internos
+from modules import (
+    mod_dcf,
+    mod_markets,
+    mod_portfolio,
+    mod_wealth,
+    mod_dealroom,
+    mod_asset_mgmt
+)
+
 # Cadena de conexión por defecto a TiDB Cloud
 DEFAULT_DB_URL = "mysql+pymysql://4K4VAw4t4ZPFUTF.root:I1lVZQDq2d4KJbQA@gateway01.us-east-1.prod.aws.tidbcloud.com:4000/valuations_db"
 
-# Intentar obtener URL desde secrets, variables de entorno o fallback a TiDB Cloud directamente
 try:
     st.session_state.db_url = st.secrets["mysql"]["url"]
 except Exception:
@@ -34,13 +34,11 @@ except Exception:
 st.sidebar.title("🏛️ Gylfi Software")
 st.sidebar.markdown("**Suite de Banca de Inversión**")
 
-# Estado de conexión en Sidebar
 if st.session_state.db_url:
     st.sidebar.caption("🟢 Conectado a TiDB Cloud")
 else:
     st.sidebar.caption("🔴 DB no configurada")
 
-# Menú de Navegación Lateral
 module = st.sidebar.radio(
     "Navegación / Módulos",
     [
@@ -55,21 +53,15 @@ module = st.sidebar.radio(
 
 st.sidebar.markdown("---")
 
-# Enrutamiento de Módulos
 if module == "📊 Modelo DCF & M&A":
     mod_dcf.render()
-
 elif module == "📈 Mercados & Clases de Activos":
     mod_markets.render()
-
 elif module == "💼 Gestión de Portafolio":
     mod_portfolio.render()
-
 elif module == "🌐 Gestión Global de Patrimonio":
     mod_wealth.render()
-
 elif module == "🏛️ M&A & Deal Room":
     mod_dealroom.render()
-
-elif module == "💼 Asset Management & Riesgo":
+elif module == "📈 Asset Management & Fondos":
     mod_asset_mgmt.render()
