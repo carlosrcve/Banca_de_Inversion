@@ -69,5 +69,5 @@ elif module == "🌐 Gestión Global de Patrimonio":
 elif module == "🏛️ M&A & Deal Room":
     mod_dealroom.render()
 
-elif module == "📈 Asset Management & Fondos":
+elif module == "📈 Asset Management & Fund Portfolios":
     mod_asset_mgmt.render()
