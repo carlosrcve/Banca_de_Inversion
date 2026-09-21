@@ -112,3 +112,17 @@ git push origin main
 
 gylfisoftware@gmail.com
 Ca22021956*
+
+
+
+
+
+Si mal no recuerdo, además del módulo de Gestión de Portafolio que acabamos de dejar perfecto con los gráficos de Plotly y Yahoo Finance, en la barra lateral de tu aplicación también tenemos pendientes o estructurados otros apartados muy potentes de tu suite de banca de inversión:
+
+El Modelo DCF & M&A: Para hacer valoraciones de empresas por flujo de caja descontado y proyecciones financieras corporativas.
+
+Mercados & Clases de Activos: Para consultar el comportamiento de diferentes tipos de activos de forma global.
+
+Otras automatizaciones: Como las integraciones con bots de notificación o los cálculos fiscales y contables que sueles manejar.
+
+¿Te referías a alguno de estos módulos o estabas pensando en otra función o característica nueva para agregarle al sistema? ¡Dime y lo retomamos al instante!
